@@ -250,7 +250,7 @@ async def login(request: LoginRequest, req: Request):
         # Clear failed attempts on success
         clear_failed_attempts(user["id"])
 
-        access_token_expires = timedelta(hours=24)
+        access_token_expires = timedelta(hours=4)
         access_token = create_access_token(
             data={
                 "user_id": user["id"],
@@ -436,13 +436,13 @@ async def forgot_password(request: ForgotPasswordRequest):
         # Don't reveal whether email exists
         return {"success": True, "message": "If the email exists, a reset token has been generated"}
 
-    token = create_password_reset_token(row["id"])
+    create_password_reset_token(row["id"])
 
-    # In production, send via email. For now, return token directly.
+    # TODO: Send token via email in production (e.g., SendGrid, SES)
+    logger.info(f"Password reset token generated for user {row['id']} (token should be emailed, not returned)")
     return {
         "success": True,
-        "message": "Password reset token generated",
-        "reset_token": token,
+        "message": "If the email exists, a password reset link has been sent",
     }
 
 

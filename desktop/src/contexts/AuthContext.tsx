@@ -84,7 +84,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }, 30 * 60 * 1000);
     };
 
-    const events = ['mousedown', 'keypress', 'scroll', 'touchstart'];
+    const events = ['mousedown', 'keypress', 'touchstart'];
     events.forEach((event) => window.addEventListener(event, resetTimer));
     resetTimer();
 

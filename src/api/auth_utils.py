@@ -33,8 +33,12 @@ SECRET_KEY = os.environ.get(
     "NYAYASETU_SECRET_KEY",
     "nyayasetu-dev-secret-key-CHANGE-IN-PRODUCTION"
 )
+if SECRET_KEY == "nyayasetu-dev-secret-key-CHANGE-IN-PRODUCTION":
+    logger.warning(
+        "SECURITY: Using default secret key. Set NYAYASETU_SECRET_KEY env var in production!"
+    )
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_HOURS = 24
+ACCESS_TOKEN_EXPIRE_HOURS = 4
 
 
 # ============================================================================

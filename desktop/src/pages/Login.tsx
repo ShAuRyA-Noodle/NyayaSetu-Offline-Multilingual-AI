@@ -7,6 +7,7 @@ import apiService from '../services/api';
 import AshokaChakra from '../components/decorative/AshokaChakra';
 import WarliIllustration from '../components/decorative/WarliIllustration';
 import RangoliPattern from '../components/decorative/RangoliPattern';
+import GlobeParticles from '../components/decorative/GlobeParticles';
 import ThemedSpinner from '../components/ui/ThemedSpinner';
 import TextReveal from '../components/ui/TextReveal';
 
@@ -100,8 +101,8 @@ const Login: React.FC = () => {
   const inputClassRight = "w-full pl-10 pr-12 py-3 village-input";
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-kora dark:bg-night-bg">
-      {/* Background: Either 3D scene or village-themed */}
+    <div className="min-h-screen relative overflow-x-hidden overflow-y-auto bg-kora dark:bg-night-bg" data-lenis-prevent>
+      {/* Background: Either 3D scene or globe particles */}
       {use3D ? (
         <Suspense fallback={null}>
           <LoginScene />
@@ -110,14 +111,14 @@ const Login: React.FC = () => {
         <>
           {/* Village gradient background */}
           <div className="absolute inset-0 bg-gradient-village dark:bg-gradient-night" />
+          {/* Globe particle effect */}
+          <GlobeParticles className="z-[1]" />
           {/* Subtle kolam pattern */}
-          <div className="absolute inset-0 z-[1]">
-            <RangoliPattern opacity={0.04} />
+          <div className="absolute inset-0 z-[2]">
+            <RangoliPattern opacity={0.03} />
           </div>
           {/* Grain */}
-          <div className="absolute inset-0 z-[2] grain-overlay" />
-          {/* Warm radial glows */}
-          <div className="absolute inset-0 z-[1] bg-village" />
+          <div className="absolute inset-0 z-[3] grain-overlay" />
         </>
       )}
 
@@ -198,7 +199,7 @@ const Login: React.FC = () => {
             </motion.div>
 
             {/* Form Card */}
-            <div className="village-card warli-border grain-overlay p-5 sm:p-7 md:p-8">
+            <div className="village-card border border-mitti-200/40 dark:border-night-border/60 shadow-elevated grain-overlay p-5 sm:p-7 md:p-8">
               {/* Tabs */}
               <div className="flex mb-6 village-card-subtle p-1 rounded-xl relative z-10">
                 <button

@@ -432,7 +432,7 @@ const BrowseTab: React.FC = () => {
           </div>
 
           {/* Scrollable Body */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto" data-lenis-prevent>
 
             {/* ---- AI SUMMARY TAB ---- */}
             {modalTab === 'summary' && (

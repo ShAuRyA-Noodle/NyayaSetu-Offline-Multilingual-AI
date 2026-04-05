@@ -10,17 +10,29 @@ import PageTransition from '../components/ui/PageTransition';
 import ThemedSpinner from '../components/ui/ThemedSpinner';
 import TextReveal from '../components/ui/TextReveal';
 import WarliIllustration from '../components/decorative/WarliIllustration';
+import CountUp from '../components/ui/CountUp';
+import { useTimeOfDay } from '../hooks/useTimeOfDay';
 import { useTilt } from '../hooks/useTilt';
 
 const stagger = {
-  container: { animate: { transition: { staggerChildren: 0.08 } } },
-  item: { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 } },
+  container: {
+    initial: {},
+    animate: { transition: { staggerChildren: 0.05, delayChildren: 0.1 } },
+  },
+  item: {
+    initial: { opacity: 0, y: 25 },
+    animate: {
+      opacity: 1, y: 0,
+      transition: { duration: 0.5, ease: [0.25, 1, 0.5, 1] as const },
+    },
+  },
 };
 
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { greeting, greetingHindi } = useTimeOfDay();
   const role = user?.role || 'citizen';
 
   const [loading, setLoading] = useState(true);
@@ -72,7 +84,13 @@ const Dashboard: React.FC = () => {
           {onClick && <ArrowUpRight className="w-4 h-4 text-mitti-400 group-hover:text-mitti-500 transition-colors" />}
         </div>
         <p className="text-sm text-mitti-600 dark:text-mitti-400 mb-1">{title}</p>
-        <p className="text-3xl md:text-4xl font-display font-bold text-mitti-900 dark:text-kora-100">{value ?? 0}</p>
+        <p className="text-3xl md:text-4xl font-display font-bold text-mitti-900 dark:text-kora-100">
+          {typeof value === 'number' ? (
+            <CountUp end={value} duration={1200} />
+          ) : (
+            value ?? 0
+          )}
+        </p>
       </motion.div>
     );
   };
@@ -114,13 +132,13 @@ const Dashboard: React.FC = () => {
               <WarliIllustration variant="village" size={100} />
             </div>
             <div>
-              <TextReveal as="h1" className="text-3xl md:text-hero-sm font-display font-bold text-mitti-900 dark:text-kora-100" splitBy="word" stagger={0.03}>
-                {t('dashboard.title')}
+              <TextReveal as="h1" className="text-3xl md:text-hero-sm font-display font-bold text-mitti-900 dark:text-kora-100 dark:text-glow" splitBy="word" stagger={0.03}>
+                {greeting}
               </TextReveal>
               <p className="text-mitti-600 dark:text-mitti-400 mt-1">
                 {t('dashboard.welcomeBack')}, <span className="text-mitti-500 font-semibold">{user?.username || 'User'}</span>
               </p>
-              <p className="font-devanagari text-lg text-mitti-400 dark:text-mitti-500 mt-0.5">स्वागत है</p>
+              <p className="font-devanagari text-lg text-mitti-400 dark:text-mitti-500 mt-0.5">{greetingHindi}</p>
             </div>
           </div>
           <motion.button

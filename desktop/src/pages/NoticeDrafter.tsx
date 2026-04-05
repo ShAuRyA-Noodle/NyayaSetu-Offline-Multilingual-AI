@@ -379,7 +379,7 @@ const ViewModal: React.FC<ViewModalProps> = ({ notice, onClose }) => {
           </div>
         </div>
 
-        <div className="p-6 overflow-y-auto flex-1">
+        <div className="p-6 overflow-y-auto flex-1" data-lenis-prevent>
           {notice.formatted_notice ? (
             <pre className="whitespace-pre-wrap font-serif text-sm leading-relaxed text-mitti-900 dark:text-kora-100 bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 p-5 rounded-r-lg">
               {notice.formatted_notice}
@@ -462,7 +462,7 @@ const EditModal: React.FC<EditModalProps> = ({ notice, onClose, onSaved }) => {
           <button onClick={onClose} className="p-2 bg-white/20 rounded-lg hover:bg-mitti-100/50 transition-all"><X className="w-5 h-5" /></button>
         </div>
 
-        <div className="p-6 overflow-y-auto flex-1 space-y-4">
+        <div className="p-6 overflow-y-auto flex-1 space-y-4" data-lenis-prevent>
           <div>
             <label className="block text-sm font-medium text-mitti-700 dark:text-mitti-300 mb-1">{t('notices.subject', 'Subject')}</label>
             <input type="text" value={subject} onChange={(e) => setSubject(e.target.value)}
@@ -1084,7 +1084,7 @@ const PublicBoardTab: React.FC = () => {
                 <h2 className="font-bold">{selectedNotice.subject || selectedNotice.scheme_name}</h2>
                 <button onClick={() => setSelectedNotice(null)} className="p-2 bg-white/20 rounded-lg hover:bg-mitti-100/50 transition-all"><X className="w-5 h-5" /></button>
               </div>
-              <div className="p-6 overflow-y-auto flex-1">
+              <div className="p-6 overflow-y-auto flex-1" data-lenis-prevent>
                 {selectedNotice.formatted_notice ? (
                   <pre className="whitespace-pre-wrap font-serif text-sm leading-relaxed text-mitti-900 dark:text-kora-100 bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 p-5 rounded-r-lg">
                     {selectedNotice.formatted_notice}

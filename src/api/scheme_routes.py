@@ -424,11 +424,27 @@ async def update_scheme_metadata(
             if not can_user_manage_scheme(current_user["id"], scheme_id, conn):
                 raise HTTPException(403, "Permission denied")
 
+            new_scheme_id = None
             updates = []
             params = []
             if body.scheme_name is not None:
                 updates.append("scheme_name = ?")
                 params.append(body.scheme_name)
+                # Generate new scheme_id from the new name to prevent duplicates on re-upload
+                new_scheme_id = generate_scheme_id(body.scheme_name)
+                if new_scheme_id != scheme_id:
+                    # Check the new ID doesn't already exist (different scheme)
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "SELECT scheme_id FROM schemes_metadata WHERE scheme_id = ? AND scheme_id != ?",
+                        (new_scheme_id, scheme_id),
+                    )
+                    if cursor.fetchone():
+                        raise HTTPException(
+                            409, f"A scheme with a similar name already exists (ID conflict: {new_scheme_id})"
+                        )
+                    updates.append("scheme_id = ?")
+                    params.append(new_scheme_id)
             if body.tags is not None:
                 updates.append("tags = ?")
                 params.append(json.dumps(body.tags))
@@ -458,7 +474,21 @@ async def update_scheme_metadata(
                 params,
             )
 
-        return {"success": True, "scheme_id": scheme_id}
+            # Update scheme_id in related tables if it changed
+            if new_scheme_id and new_scheme_id != scheme_id:
+                for table in ("scheme_chunks", "scheme_versions", "scheme_assignments", "upload_history"):
+                    try:
+                        conn.execute(
+                            f"UPDATE {table} SET scheme_id = ? WHERE scheme_id = ?",
+                            (new_scheme_id, scheme_id),
+                        )
+                    except Exception:
+                        pass  # Table may not have records for this scheme
+
+            conn.commit()
+
+        final_id = new_scheme_id if new_scheme_id and new_scheme_id != scheme_id else scheme_id
+        return {"success": True, "scheme_id": final_id}
     except HTTPException:
         raise
     except Exception as e:
@@ -552,7 +582,11 @@ async def upload_scheme(
             file_hash = hashlib.sha256(file_content).hexdigest()
 
             os.makedirs("temp", exist_ok=True)
-            temp_path = f"temp/{file.filename}"
+            # Sanitize filename to prevent path traversal
+            safe_filename = os.path.basename(file.filename)
+            if not safe_filename:
+                safe_filename = f"upload_{hashlib.md5(file_content[:256]).hexdigest()[:8]}.txt"
+            temp_path = os.path.join("temp", safe_filename)
             with open(temp_path, "wb") as f:
                 f.write(file_content)
 

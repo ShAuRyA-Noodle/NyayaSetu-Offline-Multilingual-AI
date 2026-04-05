@@ -605,7 +605,10 @@ async def update_sla_config(
 # ============================================================================
 
 @router.get("/{grievance_id}")
-async def get_grievance_detail(grievance_id: str):
+async def get_grievance_detail(
+    grievance_id: str,
+    current_user: dict = Depends(get_current_user),
+):
     """Get full grievance details with timeline and SLA."""
     try:
         with get_db() as conn:
@@ -616,6 +619,16 @@ async def get_grievance_detail(grievance_id: str):
                 raise HTTPException(404, f"Grievance {grievance_id} not found")
 
             grievance = dict(row)
+
+            # Authorization: only the filing citizen, assigned officer, or admin can view
+            user_role = current_user.get("role")
+            user_id = current_user.get("id")
+            if user_role == "citizen" and grievance.get("citizen_id") != user_id:
+                raise HTTPException(403, "You can only view your own grievances")
+            if user_role == "officer":
+                assigned = grievance.get("assigned_officer_name") or ""
+                if assigned != current_user.get("username"):
+                    raise HTTPException(403, "This grievance is not assigned to you")
 
             # Timeline
             cursor.execute("""

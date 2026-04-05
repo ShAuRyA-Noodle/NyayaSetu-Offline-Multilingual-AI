@@ -545,7 +545,7 @@ const MyGrievancesTab: React.FC = () => {
                     <h4 className="text-xs font-bold text-mitti-500 dark:text-mitti-400 uppercase tracking-wider mb-3 flex items-center">
                       <MessageSquare className="w-4 h-4 mr-2" />{t('grievances.messages', 'Messages')} ({(comments[g.grievance_id] || []).length})
                     </h4>
-                    <div className="space-y-2 mb-3 max-h-64 overflow-y-auto">
+                    <div className="space-y-2 mb-3 max-h-64 overflow-y-auto" data-lenis-prevent>
                       {(comments[g.grievance_id] || []).map((c: any) => (
                         <div key={c.id} className={`p-3 rounded-lg ${
                           c.author_role === 'officer' ? 'bg-mitti-50 dark:bg-mitti-800/20 border border-mitti-100 dark:border-mitti-700' :
@@ -1065,6 +1065,9 @@ const AllGrievancesTab: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [detailData, setDetailData] = useState<any>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   useEffect(() => { loadAll(); }, [statusFilter, deptFilter]);
 
@@ -1074,6 +1077,23 @@ const AllGrievancesTab: React.FC = () => {
       const data = await apiService.getAllGrievances(statusFilter || undefined, deptFilter || undefined);
       setGrievances(data.grievances || []);
     } catch { /* ignore */ } finally { setLoading(false); }
+  };
+
+  const handleCardClick = async (grievanceId: string) => {
+    if (expandedId === grievanceId) {
+      setExpandedId(null);
+      setDetailData(null);
+      return;
+    }
+    setExpandedId(grievanceId);
+    setDetailLoading(true);
+    try {
+      const data = await apiService.getGrievanceDetail(grievanceId);
+      setDetailData(data);
+    } catch {
+      toast.error('Failed to load grievance details');
+      setDetailData(null);
+    } finally { setDetailLoading(false); }
   };
 
   const getStatusColor = (status: string) => {
@@ -1126,14 +1146,18 @@ const AllGrievancesTab: React.FC = () => {
               variants={cardVariants}
               initial="hidden"
               animate="visible"
-              className="village-card rounded-xl p-4"
+              className={`village-card rounded-xl p-4 cursor-pointer transition-all ${expandedId === g.grievance_id ? 'ring-2 ring-mitti-500/40' : 'hover:shadow-elevated'}`}
+              onClick={() => handleCardClick(g.grievance_id)}
             >
-              <div className="flex items-center flex-wrap gap-2 mb-2">
-                <span className="font-mono text-sm text-mitti-500 dark:text-mitti-400 font-semibold">{g.grievance_id}</span>
-                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${getStatusColor(g.status)}`}>{g.status?.toUpperCase()}</span>
-                {g.priority && <span className="text-xs text-mitti-500 uppercase font-bold">{g.priority}</span>}
-                {g.department && <span className="text-xs px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full">{g.department}</span>}
-                <span className="text-xs text-mitti-500"><Clock className="w-3 h-3 inline mr-1" />{g.submitted_at ? new Date(g.submitted_at).toLocaleDateString() : ''}</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center flex-wrap gap-2 mb-2">
+                  <span className="font-mono text-sm text-mitti-500 dark:text-mitti-400 font-semibold">{g.grievance_id}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${getStatusColor(g.status)}`}>{g.status?.toUpperCase()}</span>
+                  {g.priority && <span className="text-xs text-mitti-500 uppercase font-bold">{g.priority}</span>}
+                  {g.department && <span className="text-xs px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full">{g.department}</span>}
+                  <span className="text-xs text-mitti-500"><Clock className="w-3 h-3 inline mr-1" />{g.submitted_at ? new Date(g.submitted_at).toLocaleDateString() : ''}</span>
+                </div>
+                {expandedId === g.grievance_id ? <ChevronUp className="w-5 h-5 text-mitti-400 flex-shrink-0" /> : <ChevronDown className="w-5 h-5 text-mitti-400 flex-shrink-0" />}
               </div>
               <h3 className="font-semibold text-mitti-900 dark:text-kora-100 mb-1">{g.title || g.description?.slice(0, 100)}</h3>
               <p className="text-sm text-mitti-600 dark:text-mitti-300 line-clamp-2">{g.description}</p>
@@ -1141,6 +1165,143 @@ const AllGrievancesTab: React.FC = () => {
                 {g.citizen_name && <span><User className="w-3 h-3 inline mr-1" />{g.citizen_name}</span>}
                 {g.assigned_officer_name && <span>{t('grievances.assigned', 'Assigned')}: {g.assigned_officer_name}</span>}
               </div>
+
+              {/* Expanded Detail View */}
+              <AnimatePresence>
+                {expandedId === g.grievance_id && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
+                    className="overflow-hidden"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="mt-4 pt-4 border-t border-mitti-200/30 dark:border-night-border/40">
+                      {detailLoading ? (
+                        <div className="flex items-center justify-center py-6">
+                          <ThemedSpinner size="sm" />
+                          <span className="ml-2 text-sm text-mitti-500">Loading details...</span>
+                        </div>
+                      ) : detailData ? (
+                        <div className="space-y-4">
+                          {/* Full Description */}
+                          <div>
+                            <h4 className="text-xs font-bold text-mitti-500 dark:text-mitti-400 uppercase tracking-wider mb-1">Full Description</h4>
+                            <p className="text-sm text-mitti-700 dark:text-mitti-300 leading-relaxed">{detailData.description}</p>
+                          </div>
+
+                          {/* Info Grid */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            {detailData.citizen_name && (
+                              <div className="bg-kora-50/60 dark:bg-night-card/40 rounded-lg p-2.5">
+                                <p className="text-xs text-mitti-400 dark:text-mitti-500">Citizen</p>
+                                <p className="text-sm font-medium text-mitti-800 dark:text-kora-200">{detailData.citizen_name}</p>
+                              </div>
+                            )}
+                            {detailData.citizen_email && (
+                              <div className="bg-kora-50/60 dark:bg-night-card/40 rounded-lg p-2.5">
+                                <p className="text-xs text-mitti-400 dark:text-mitti-500">Email</p>
+                                <p className="text-sm font-medium text-mitti-800 dark:text-kora-200 truncate">{detailData.citizen_email}</p>
+                              </div>
+                            )}
+                            {detailData.department && (
+                              <div className="bg-kora-50/60 dark:bg-night-card/40 rounded-lg p-2.5">
+                                <p className="text-xs text-mitti-400 dark:text-mitti-500">Department</p>
+                                <p className="text-sm font-medium text-mitti-800 dark:text-kora-200">{detailData.department}</p>
+                              </div>
+                            )}
+                            {detailData.assigned_officer_name && (
+                              <div className="bg-kora-50/60 dark:bg-night-card/40 rounded-lg p-2.5">
+                                <p className="text-xs text-mitti-400 dark:text-mitti-500">Assigned To</p>
+                                <p className="text-sm font-medium text-mitti-800 dark:text-kora-200">{detailData.assigned_officer_name}</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* SLA Info */}
+                          {detailData.sla && (
+                            <div className="bg-kora-50/60 dark:bg-night-card/40 rounded-lg p-3">
+                              <h4 className="text-xs font-bold text-mitti-500 dark:text-mitti-400 uppercase tracking-wider mb-2">SLA Status</h4>
+                              <div className="flex flex-wrap gap-3 text-sm">
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${detailData.sla.breached ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-india-green-100 text-india-green-700 dark:bg-india-green-900/30 dark:text-india-green-400'}`}>
+                                  {detailData.sla.breached ? 'SLA Breached' : 'Within SLA'}
+                                </span>
+                                {detailData.sla.hours_remaining != null && (
+                                  <span className="text-mitti-600 dark:text-mitti-300">{Math.round(detailData.sla.hours_remaining)}h remaining</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Timeline */}
+                          {detailData.timeline && detailData.timeline.length > 0 && (
+                            <div>
+                              <h4 className="text-xs font-bold text-mitti-500 dark:text-mitti-400 uppercase tracking-wider mb-2">Timeline</h4>
+                              <div className="space-y-2 max-h-48 overflow-y-auto" data-lenis-prevent>
+                                {detailData.timeline.map((entry: any, i: number) => (
+                                  <div key={i} className="flex items-start gap-3 text-sm">
+                                    <div className="w-2 h-2 mt-1.5 rounded-full bg-mitti-400 flex-shrink-0" />
+                                    <div>
+                                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold mr-2 ${getStatusColor(entry.new_status)}`}>{entry.new_status}</span>
+                                      {entry.update_notes && <span className="text-mitti-600 dark:text-mitti-300">{entry.update_notes}</span>}
+                                      <p className="text-xs text-mitti-400 mt-0.5">{new Date(entry.timestamp).toLocaleString()}</p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Comments */}
+                          {detailData.comments && detailData.comments.length > 0 && (
+                            <div>
+                              <h4 className="text-xs font-bold text-mitti-500 dark:text-mitti-400 uppercase tracking-wider mb-2 flex items-center">
+                                <MessageSquare className="w-3.5 h-3.5 mr-1.5" />Comments ({detailData.comments.length})
+                              </h4>
+                              <div className="space-y-2 max-h-48 overflow-y-auto" data-lenis-prevent>
+                                {detailData.comments.map((c: any) => (
+                                  <div key={c.id} className="bg-kora-50/60 dark:bg-night-card/40 rounded-lg p-3">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className="text-xs font-bold text-mitti-700 dark:text-kora-200">{c.author_name}</span>
+                                      <span className="text-xs px-1.5 py-0.5 rounded bg-mitti-100/50 dark:bg-night-card/50 text-mitti-500 capitalize">{c.author_role}</span>
+                                      <span className="text-xs text-mitti-400">{new Date(c.created_at).toLocaleString()}</span>
+                                    </div>
+                                    <p className="text-sm text-mitti-600 dark:text-mitti-300">{c.comment_text}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Rating */}
+                          {detailData.rating && (
+                            <div className="bg-kora-50/60 dark:bg-night-card/40 rounded-lg p-3">
+                              <h4 className="text-xs font-bold text-mitti-500 dark:text-mitti-400 uppercase tracking-wider mb-1">Citizen Rating</h4>
+                              <div className="flex items-center gap-1">
+                                {[1, 2, 3, 4, 5].map((s) => (
+                                  <Star key={s} className={`w-4 h-4 ${s <= detailData.rating.rating ? 'text-haldi-500 fill-haldi-500' : 'text-mitti-300'}`} />
+                                ))}
+                                {detailData.rating.feedback_text && <span className="ml-2 text-sm text-mitti-600 dark:text-mitti-300">{detailData.rating.feedback_text}</span>}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Resolution Notes */}
+                          {detailData.resolution_notes && (
+                            <div className="bg-india-green-50/60 dark:bg-india-green-900/10 border border-india-green-200/40 dark:border-india-green-700/20 rounded-lg p-3">
+                              <h4 className="text-xs font-bold text-india-green-700 dark:text-india-green-400 uppercase tracking-wider mb-1">Resolution</h4>
+                              <p className="text-sm text-india-green-800 dark:text-india-green-300">{detailData.resolution_notes}</p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-mitti-500 py-4 text-center">Could not load details.</p>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           ))}
         </div>

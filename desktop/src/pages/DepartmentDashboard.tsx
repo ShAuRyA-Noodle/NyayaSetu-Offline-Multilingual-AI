@@ -465,7 +465,7 @@ const DepartmentDashboard: React.FC = () => {
                             ) : (comments[grievance.grievance_id] || []).length === 0 ? (
                               <p className="text-sm text-mitti-500 dark:text-mitti-400 italic mb-4">No comments yet. Add an update below.</p>
                             ) : (
-                              <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
+                              <div className="space-y-3 mb-4 max-h-64 overflow-y-auto" data-lenis-prevent>
                                 {(comments[grievance.grievance_id] || []).map((comment) => (
                                   <div key={comment.id} className={`p-3 rounded-lg ${
                                     comment.author_role === 'officer' || comment.author_role === 'admin'
