@@ -1,0 +1,325 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ================================================================
+   NYAYASETU VILLAGE DESIGN SYSTEM
+   ================================================================ */
+
+@layer base {
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html {
+    scroll-behavior: auto; /* Lenis handles smooth scrolling */
+  }
+
+  body {
+    font-family: 'Noto Sans', 'Noto Sans Devanagari', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: #FBF7F0;
+    color: #3A220E;
+  }
+
+  .dark body {
+    background-color: #0F0D0A;
+    color: #F0D5B8;
+  }
+
+  /* Hide default cursor for custom cursor */
+  body.custom-cursor,
+  body.custom-cursor *,
+  body.custom-cursor *::before,
+  body.custom-cursor *::after {
+    cursor: none !important;
+  }
+
+  #root { width: 100%; height: 100vh; }
+
+  /* Earthy scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(194, 123, 58, 0.3);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(194, 123, 58, 0.5); }
+
+  /* Selection */
+  ::selection {
+    background: rgba(194, 123, 58, 0.2);
+    color: #3A220E;
+  }
+  .dark ::selection {
+    background: rgba(245, 158, 11, 0.3);
+    color: #FBF7F0;
+  }
+}
+
+/* ========================
+   COMPONENT SYSTEM
+   ======================== */
+@layer components {
+
+  /* ---- VILLAGE CARD SYSTEM ---- */
+
+  .village-card {
+    @apply bg-kora-100/80 dark:bg-night-card/80
+           backdrop-blur-md
+           border border-mitti-200/40 dark:border-night-border/60
+           rounded-2xl
+           shadow-glass;
+    position: relative;
+  }
+
+  .village-card-subtle {
+    @apply bg-kora-50/60 dark:bg-night-surface/50
+           border border-mitti-100/30 dark:border-night-border/40
+           rounded-xl;
+  }
+
+  .village-card-mitti {
+    @apply bg-gradient-to-br from-mitti-50 to-mitti-100/80
+           dark:from-mitti-900/20 dark:to-mitti-800/10
+           border border-mitti-200/40 dark:border-mitti-700/20
+           rounded-2xl;
+  }
+
+  .village-card-haldi {
+    @apply bg-gradient-to-br from-haldi-50 to-haldi-100/80
+           dark:from-haldi-700/15 dark:to-haldi-600/10
+           border border-haldi-200/40 dark:border-haldi-700/20
+           rounded-2xl;
+  }
+
+  .village-card-neel {
+    @apply bg-gradient-to-br from-neel-50 to-neel-100/80
+           dark:from-neel-800/20 dark:to-neel-900/10
+           border border-neel-200/40 dark:border-neel-700/20
+           rounded-2xl;
+  }
+
+  .village-panel {
+    @apply bg-kora-100/90 dark:bg-night-surface/90
+           backdrop-blur-2xl
+           border-r border-mitti-200/30 dark:border-night-border/40;
+  }
+
+  /* ---- GRAIN OVERLAY ---- */
+  .grain-overlay {
+    position: relative;
+  }
+  .grain-overlay::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1;
+  }
+  .dark .grain-overlay::before { opacity: 0.05; }
+
+  /* ---- VILLAGE BUTTONS ---- */
+  .btn-mitti {
+    @apply bg-gradient-to-r from-mitti-500 to-mitti-600
+           hover:from-mitti-600 hover:to-mitti-700
+           text-white font-semibold py-3 px-6
+           rounded-xl shadow-mitti
+           transition-all duration-300
+           hover:shadow-mitti-lg hover:-translate-y-0.5
+           active:translate-y-0;
+  }
+
+  .btn-haldi {
+    @apply bg-gradient-to-r from-haldi-400 to-haldi-500
+           hover:from-haldi-500 hover:to-haldi-600
+           text-white font-semibold py-3 px-6
+           rounded-xl shadow-haldi
+           transition-all duration-300
+           hover:shadow-lg hover:-translate-y-0.5
+           active:translate-y-0;
+  }
+
+  .btn-neel {
+    @apply bg-gradient-to-r from-neel-500 to-neel-600
+           hover:from-neel-600 hover:to-neel-700
+           text-white font-semibold py-3 px-6
+           rounded-xl shadow-neel
+           transition-all duration-300
+           hover:shadow-lg hover:-translate-y-0.5
+           active:translate-y-0;
+  }
+
+  /* Backward compat buttons */
+  .btn-saffron {
+    @apply bg-gradient-to-r from-mitti-500 to-haldi-500
+           hover:from-mitti-600 hover:to-haldi-600
+           text-white font-semibold py-3 px-6
+           rounded-xl shadow-mitti
+           transition-all duration-300
+           hover:shadow-mitti-lg hover:-translate-y-0.5
+           active:translate-y-0;
+  }
+
+  .btn-green {
+    @apply bg-gradient-to-r from-india-green-500 to-india-green-600
+           hover:from-india-green-600 hover:to-india-green-700
+           text-white font-semibold py-3 px-6
+           rounded-xl shadow-green
+           transition-all duration-300
+           hover:shadow-lg hover:-translate-y-0.5
+           active:translate-y-0;
+  }
+
+  .btn-outline-saffron {
+    @apply border-2 border-mitti-500 text-mitti-600 dark:text-mitti-400
+           font-semibold py-2.5 px-5
+           rounded-xl
+           transition-all duration-300
+           hover:bg-mitti-500/10;
+  }
+
+  /* ---- VILLAGE INPUTS ---- */
+  .village-input {
+    @apply w-full px-4 py-3
+           bg-kora-50/80 dark:bg-night-card/60
+           border border-mitti-200/40 dark:border-night-border/60
+           rounded-xl
+           text-mitti-900 dark:text-kora-200
+           placeholder-mitti-400/60 dark:placeholder-night-muted
+           focus:outline-none focus:ring-2 focus:ring-mitti-500/40
+           focus:border-mitti-500/50
+           transition-all duration-300;
+  }
+
+  /* Backward compat aliases */
+  .glass-card { @apply village-card; }
+  .glass-panel { @apply village-panel; }
+  .glass-card-subtle { @apply village-card-subtle; }
+  .glass-saffron { @apply village-card-mitti; }
+  .glass-green { @apply village-card-neel; }
+  .glass-input { @apply village-input; }
+
+  /* ---- WARLI BORDER ---- */
+  .warli-border {
+    position: relative;
+  }
+  .warli-border::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    padding: 2px;
+    background: linear-gradient(135deg, #C27B3A, #D49A5E, #A66228, #7D4A1E, #C27B3A);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  /* Backward compat */
+  .rangoli-border { @apply warli-border; }
+
+  /* ---- KOLAM DIVIDER ---- */
+  .kolam-divider {
+    height: 2px;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(194,123,58,0.1) 10%,
+      rgba(194,123,58,0.5) 30%,
+      rgba(194,123,58,0.8) 50%,
+      rgba(194,123,58,0.5) 70%,
+      rgba(194,123,58,0.1) 90%,
+      transparent 100%
+    );
+    position: relative;
+  }
+  .kolam-divider::before {
+    content: '\25C8';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    color: #C27B3A;
+    font-size: 12px;
+    background: #FBF7F0;
+    padding: 0 8px;
+  }
+  .dark .kolam-divider::before {
+    background: #0F0D0A;
+    color: #D49A5E;
+  }
+
+  /* ---- BACKGROUND PATTERNS ---- */
+  .bg-village {
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(194,123,58,0.04) 0%, transparent 50%),
+      radial-gradient(circle at 80% 70%, rgba(245,158,11,0.03) 0%, transparent 50%),
+      radial-gradient(circle at 50% 50%, rgba(45,74,122,0.02) 0%, transparent 50%);
+  }
+
+  /* Backward compat */
+  .bg-pattern { @apply bg-village; }
+
+  /* ---- SPINNER ---- */
+  .chakra-spinner {
+    width: 48px; height: 48px;
+    border: 3px solid transparent;
+    border-top-color: #C27B3A;
+    border-right-color: #D49A5E;
+    border-bottom-color: #A66228;
+    border-radius: 50%;
+    animation: spin 1.2s linear infinite;
+    position: relative;
+  }
+  .chakra-spinner::after {
+    content: '';
+    position: absolute;
+    inset: 6px;
+    border: 2px solid transparent;
+    border-top-color: #F59E0B;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite reverse;
+  }
+  .chakra-spinner-sm { width: 24px; height: 24px; border-width: 2px; }
+  .chakra-spinner-sm::after { inset: 3px; border-width: 1.5px; }
+  .chakra-spinner-lg { width: 64px; height: 64px; border-width: 4px; }
+  .chakra-spinner-lg::after { inset: 8px; border-width: 3px; }
+
+  /* ---- TABS ---- */
+  .glass-tab {
+    @apply px-5 py-2.5 rounded-xl font-medium transition-all duration-300;
+  }
+  .glass-tab-active {
+    @apply bg-mitti-500 text-white shadow-mitti;
+  }
+  .glass-tab-inactive {
+    @apply text-mitti-700 dark:text-mitti-300 hover:bg-mitti-100/50 dark:hover:bg-night-card/50;
+  }
+
+  /* ---- STATUS BADGES ---- */
+  .badge-pending { @apply bg-haldi-100 text-haldi-700 dark:bg-haldi-700/20 dark:text-haldi-300; }
+  .badge-accepted { @apply bg-mitti-100 text-mitti-700 dark:bg-mitti-800/20 dark:text-mitti-300; }
+  .badge-in-progress { @apply bg-neel-100 text-neel-600 dark:bg-neel-800/20 dark:text-neel-300; }
+  .badge-resolved { @apply bg-india-green-100 text-india-green-700 dark:bg-india-green-900/30 dark:text-india-green-400; }
+  .badge-rejected { @apply bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400; }
+}
+
+/* ========================
+   UTILITIES
+   ======================== */
+@layer utilities {
+  .text-gradient-mitti {
+    @apply bg-gradient-to-r from-mitti-600 via-mitti-500 to-haldi-500 bg-clip-text text-transparent;
+  }
+
+  .text-gradient-village {
+    @apply bg-gradient-to-r from-mitti-500 to-haldi-400 bg-clip-text text-transparent;
+  }
+
+  .dark .lamp-glow {
+    box-shadow: 0 0 60px rgba(245,158,11,0.08), 0 0 120px rgba(194,123,58,0.05);
+  }
+}

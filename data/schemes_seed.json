@@ -1,0 +1,23 @@
+[
+  {
+    "scheme_name": "PM-KISAN",
+    "department": "Ministry of Agriculture",
+    "eligibility": "Small and marginal farmers owning up to 2 hectares of land",
+    "benefits": "₹6000 per year in three equal installments",
+    "process": "Register through state agriculture department or CSC"
+  },
+  {
+    "scheme_name": "PMAY-G",
+    "department": "Ministry of Rural Development",
+    "eligibility": "Rural households without a pucca house",
+    "benefits": "Financial assistance for house construction",
+    "process": "Identification through SECC and Gram Sabha approval"
+  },
+  {
+    "scheme_name": "MGNREGA",
+    "department": "Ministry of Rural Development",
+    "eligibility": "Adult members of rural households willing to do unskilled work",
+    "benefits": "100 days of guaranteed wage employment per year",
+    "process": "Register at Gram Panchayat"
+  }
+]

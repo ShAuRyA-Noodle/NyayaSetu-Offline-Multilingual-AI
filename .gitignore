@@ -1,0 +1,122 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+venv.bak/
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# =========================
+# Data & Model Artifacts
+# =========================
+# Large model directories (download separately)
+models/
+translation_models/
+
+# Database files (keep seed files, ignore runtime DBs)
+backend/data/*.db
+backend/data/cache/*.db
+!backend/data/schemes_seed.json
+
+# FAISS indexes and pickles (regenerated from seed data)
+backend/data/*.index
+backend/data/*.pkl
+backend/data/*.bin
+
+# =========================
+# OS Files
+# =========================
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+
+# =========================
+# IDE / Editor
+# =========================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.vs/
+.vscode-test/
+
+# =========================
+# Testing & Coverage
+# =========================
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
+.tox/
+
+# =========================
+# Build & Distribution
+# =========================
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+
+# =========================
+# Logs
+# =========================
+*.log
+logs/
+*.log.*
+
+# =========================
+# Temporary Files
+# =========================
+*.tmp
+*.temp
+temp/
+tmp/
+
+# =========================
+# Project Specific
+# =========================
+# Backup directories
+archive/backup_api/
+
+# Claude Code
+.claude/
+
+# =========================
+# Future: Desktop App
+# =========================
+desktop/node_modules/
+desktop/dist/
+desktop/build/
+desktop/.cache/
+
+# =========================
+# Future: Mobile App
+# =========================
+mobile/.dart_tool/
+mobile/build/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+
+# =========================
+# CI/CD
+# =========================
+.github/workflows/*.log
+_dump/
