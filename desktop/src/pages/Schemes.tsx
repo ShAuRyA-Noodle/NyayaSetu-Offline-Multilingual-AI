@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import PageTransition from '../components/ui/PageTransition';
 import ThemedSpinner from '../components/ui/ThemedSpinner';
 import AnimatedModal from '../components/ui/AnimatedModal';
+import SchemeDocumentViewer, { FormattedDoc } from '../components/ui/SchemeDocumentViewer';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import apiService from '../services/api';
@@ -109,6 +110,7 @@ const BrowseTab: React.FC = () => {
   // Full document state
   const [modalTab, setModalTab] = useState<'summary' | 'document'>('summary');
   const [fullDocument, setFullDocument] = useState<string>('');
+  const [formattedDoc, setFormattedDoc] = useState<FormattedDoc | null>(null);
   const [docLoading, setDocLoading] = useState(false);
   const [docError, setDocError] = useState('');
 
@@ -207,9 +209,23 @@ const BrowseTab: React.FC = () => {
   };
 
   const handleLoadDocument = async (schemeName: string) => {
-    if (fullDocument) return;
+    if (fullDocument || formattedDoc) return;
     setDocLoading(true);
     setDocError('');
+
+    // Try the LLM-formatted endpoint first (structured, elegant output)
+    try {
+      const response = await apiService.getSchemeDocumentFormatted(schemeName);
+      if (response?.formatted?.sections?.length) {
+        setFormattedDoc(response.formatted as FormattedDoc);
+        setDocLoading(false);
+        return;
+      }
+    } catch (e) {
+      console.warn('Formatted document fetch failed, falling back to raw:', e);
+    }
+
+    // Fallback to raw text
     try {
       const response = await apiService.getSchemeDocument(schemeName);
       if (typeof response === 'string') {
@@ -232,7 +248,7 @@ const BrowseTab: React.FC = () => {
 
   const handleModalTabSwitch = (tab: 'summary' | 'document') => {
     setModalTab(tab);
-    if (tab === 'document' && selectedScheme && !fullDocument) {
+    if (tab === 'document' && selectedScheme && !fullDocument && !formattedDoc) {
       handleLoadDocument(selectedScheme);
     }
   };
@@ -242,6 +258,7 @@ const BrowseTab: React.FC = () => {
     setSummaryData(null);
     setSummaryError('');
     setFullDocument('');
+    setFormattedDoc(null);
     setDocError('');
     setModalTab('summary');
   };
@@ -580,7 +597,8 @@ const BrowseTab: React.FC = () => {
                 {docLoading && (
                   <div className="flex flex-col items-center justify-center space-y-3 py-12 text-mitti-500 dark:text-mitti-400">
                     <ThemedSpinner />
-                    <span className="text-sm">{t('schemes.loadingDocument', 'Loading full document...')}</span>
+                    <span className="text-sm">{t('schemes.loadingDocument', 'Formatting document…')}</span>
+                    <span className="text-xs text-mitti-400">First load may take a moment — results are cached.</span>
                   </div>
                 )}
                 {!docLoading && docError && (
@@ -588,12 +606,12 @@ const BrowseTab: React.FC = () => {
                     {docError}
                   </div>
                 )}
-                {!docLoading && !docError && fullDocument && (
-                  <pre className="text-sm text-mitti-700 dark:text-kora-200 whitespace-pre-wrap font-sans leading-relaxed bg-kora dark:bg-night-bg border border-mitti-200 dark:border-night-border rounded-lg p-4 overflow-x-auto">
-                    {fullDocument}
-                  </pre>
+                {!docLoading && !docError && (formattedDoc || fullDocument) && (
+                  <div className="bg-kora dark:bg-night-bg border border-mitti-200 dark:border-night-border rounded-lg p-5 md:p-6 overflow-y-auto max-h-[60vh]">
+                    <SchemeDocumentViewer content={fullDocument} formatted={formattedDoc || undefined} />
+                  </div>
                 )}
-                {!docLoading && !docError && !fullDocument && (
+                {!docLoading && !docError && !fullDocument && !formattedDoc && (
                   <p className="text-sm text-mitti-500 dark:text-mitti-400 italic text-center py-12">
                     No document content available.
                   </p>

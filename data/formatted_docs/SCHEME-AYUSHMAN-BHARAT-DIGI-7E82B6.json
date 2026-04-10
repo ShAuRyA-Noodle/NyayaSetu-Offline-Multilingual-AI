@@ -1,0 +1,151 @@
+{
+  "source_hash": "de422af9b6c0b43c",
+  "formatted": {
+    "title": "Ayushman Bharat Digital Mission (ABDM)",
+    "sections": [
+      {
+        "heading": "Overview",
+        "blocks": [
+          {
+            "type": "paragraph",
+            "text": "The Ayushman Bharat Digital Mission (ABDM) is a national initiative aimed at creating an integrated health ecosystem in India. It focuses on digitalizing healthcare services, ensuring interoperability between different systems, and providing citizens with secure access to their health records."
+          }
+        ]
+      },
+      {
+        "heading": "Key Features",
+        "blocks": [
+          {
+            "type": "bullets",
+            "items": [
+              "Voluntary participation for creating ABHA number.",
+              "Free of cost service.",
+              "Privacy and security measures including consent-based architecture, data protection, and multi-factor authentication."
+            ]
+          }
+        ]
+      },
+      {
+        "heading": "ABHA Number Creation Methods",
+        "blocks": [
+          {
+            "type": "bullets",
+            "items": [
+              "Using Aadhaar number at healthcare facilities.",
+              "Through driving license or other government-issued ID.",
+              "At ABDM-enabled hospitals and clinics."
+            ]
+          }
+        ]
+      },
+      {
+        "heading": "Eligibility Criteria",
+        "blocks": [
+          {
+            "type": "paragraph",
+            "text": "- Any citizen of India.\n- No documentary proof required if using Aadhaar.\n- Completely free of cost.\n- Voluntary participation (not mandatory).\n\nWho cannot create ABHA:\n- Non-Indian citizens unless they have valid Indian documents."
+          }
+        ]
+      },
+      {
+        "heading": "Privacy and Security",
+        "blocks": [
+          {
+            "type": "bullets",
+            "items": [
+              "Consent-based architecture.",
+              "Data protection measures including encryption in transit and at rest.",
+              "Security audits, incident response mechanisms."
+            ]
+          }
+        ]
+      },
+      {
+        "heading": "ABDM-Enabled Applications",
+        "blocks": [
+          {
+            "type": "bullets",
+            "items": [
+              "Government PHR apps: ABHA App, Aarogya Setu, eSanjeevani, CoWIN.",
+              "Private partner PHR apps: Practo PHR, Apollo 24/7, Tata 1mg."
+            ]
+          }
+        ]
+      },
+      {
+        "heading": "Integration with Existing Health Programs",
+        "blocks": [
+          {
+            "type": "bullets",
+            "items": [
+              "AYUSHMAN BHARAT PM-JAY (Pradhan Mantri Jan Arogya Yojana).",
+              "COWIN (COVID-19 Vaccination)."
+            ]
+          }
+        ]
+      },
+      {
+        "heading": "Interoperability Standards",
+        "blocks": [
+          {
+            "type": "bullets",
+            "items": [
+              "FHIR (Fast Healthcare Interoperability Resources) for health data exchange.",
+              "SNOMED CT, ICD-10, LOINC, HL7, DICOM."
+            ]
+          }
+        ]
+      },
+      {
+        "heading": "Grievance Redressal",
+        "blocks": [
+          {
+            "type": "bullets",
+            "items": [
+              "Toll-Free Number: 1800-11-4477 (14477).",
+              "Email: abdm.support@nha.gov.in.",
+              "Online grievance portal."
+            ]
+          }
+        ]
+      },
+      {
+        "heading": "Frequently Asked Questions",
+        "blocks": [
+          {
+            "type": "bullets",
+            "items": [
+              "Is ABHA number mandatory?",
+              "Will my health data be shared with government without my permission?",
+              "Can I create ABHA without Aadhaar?"
+            ]
+          }
+        ]
+      },
+      {
+        "heading": "Current Status and Achievements",
+        "blocks": [
+          {
+            "type": "bullets",
+            "items": [
+              "65+ crore ABHA numbers created.",
+              "38,000+ hospitals ABDM-enabled."
+            ]
+          }
+        ]
+      },
+      {
+        "heading": "Future Roadmap",
+        "blocks": [
+          {
+            "type": "bullets",
+            "items": [
+              "Integration with all state health schemes.",
+              "AI-based clinical decision support systems."
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

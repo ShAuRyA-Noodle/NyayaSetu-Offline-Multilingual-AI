@@ -25,9 +25,8 @@ const Header: React.FC<HeaderProps> = ({ isOnline, onMenuClick }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const [bellShake, setBellShake] = useState(false);
 
-  // Progressive backdrop blur based on scroll
+  // Simple scroll state — no per-frame blur computation
   const scrolled = scrollY > 20;
-  const blurAmount = Math.min(scrollY / 8, 20);
 
   useEffect(() => {
     loadNotificationCount();
@@ -82,13 +81,7 @@ const Header: React.FC<HeaderProps> = ({ isOnline, onMenuClick }) => {
 
   return (
     <header
-      className="village-panel border-b border-mitti-200/20 dark:border-night-border/40 px-4 md:px-6 py-3 sticky top-0 z-30"
-      style={{
-        backdropFilter: `blur(${blurAmount}px)`,
-        WebkitBackdropFilter: `blur(${blurAmount}px)`,
-        transition: 'box-shadow 0.3s cubic-bezier(0.25, 1, 0.5, 1)',
-        boxShadow: scrolled ? '0 1px 12px rgba(58, 34, 14, 0.06)' : 'none',
-      }}
+      className={`village-panel border-b border-mitti-200/20 dark:border-night-border/40 px-4 md:px-6 py-3 sticky top-0 z-30 transition-shadow duration-300 ${scrolled ? 'header-scrolled' : ''}`}
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-3">

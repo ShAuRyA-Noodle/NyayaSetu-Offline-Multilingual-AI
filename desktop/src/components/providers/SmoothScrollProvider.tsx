@@ -45,9 +45,9 @@ function ScrollTracker({ children }: { children: ReactNode }) {
       scrollProgress: progress,
     };
 
-    // Throttle React state updates to ~60ms to avoid re-rendering entire tree every frame
+    // Throttle React state updates to ~100ms to avoid re-rendering entire tree every frame
     const now = performance.now();
-    if (now - lastUpdate.current > 60) {
+    if (now - lastUpdate.current > 100) {
       lastUpdate.current = now;
       setScrollData(data);
     } else {
@@ -111,11 +111,11 @@ export default function SmoothScrollProvider({ children }: SmoothScrollProviderP
     <ReactLenis
       root
       options={{
-        lerp: 0.12,
-        duration: 1.0,
+        lerp: 0.08,
+        duration: 0.8,
         smoothWheel: true,
-        wheelMultiplier: 1.2,
-        touchMultiplier: 1.5,
+        wheelMultiplier: 1.0,
+        touchMultiplier: 1.2,
         syncTouch: false,
       }}
     >

@@ -24,15 +24,27 @@ function App() {
 
   useEffect(() => {
     checkConnection();
-    const interval = setInterval(checkConnection, 30000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      if (!document.hidden) checkConnection();
+    }, 30000);
+    // Re-check when tab becomes visible again
+    const onVisible = () => { if (!document.hidden) checkConnection(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 
-  const checkConnection = async () => {
+  const checkConnection = async (retries = 2) => {
     try {
       await apiService.checkHealth();
       setIsOnline(true);
     } catch {
+      if (retries > 0) {
+        await new Promise(r => setTimeout(r, 1500));
+        return checkConnection(retries - 1);
+      }
       setIsOnline(false);
     } finally {
       setIsLoading(false);
@@ -75,12 +87,11 @@ function App() {
                   animate={{ opacity: 1 }}
                   exit={{
                     opacity: 0,
-                    scale: 1.05,
-                    filter: 'blur(12px)',
+                    scale: 1.02,
                   }}
                   transition={{
-                    duration: 0.6,
-                    ease: [0.25, 1, 0.5, 1], // ease-out-quart
+                    duration: 0.35,
+                    ease: [0.25, 1, 0.5, 1],
                   }}
                   className="flex items-center justify-center h-screen bg-kora dark:bg-night-bg bg-village relative overflow-hidden"
                 >

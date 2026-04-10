@@ -442,15 +442,15 @@ const DepartmentDashboard: React.FC = () => {
                     </div>
 
                     {/* Expanded Comments Section */}
-                    <AnimatePresence>
-                      {expandedGrievance === grievance.grievance_id && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.3 }}
-                          className="overflow-hidden"
-                        >
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateRows: expandedGrievance === grievance.grievance_id ? '1fr' : '0fr',
+                        transition: 'grid-template-rows 0.28s cubic-bezier(0.25, 1, 0.5, 1)',
+                      }}
+                    >
+                      <div className="overflow-hidden">
+                        <div style={{ opacity: expandedGrievance === grievance.grievance_id ? 1 : 0, transition: 'opacity 0.2s ease' }}>
                           <div className="border-t border-mitti-200 dark:border-night-border village-card-subtle p-6">
                             <h4 className="text-sm font-semibold text-mitti-900 dark:text-kora-100 mb-4 flex items-center">
                               <MessageSquare className="w-4 h-4 mr-2" />
@@ -528,9 +528,9 @@ const DepartmentDashboard: React.FC = () => {
                               <p className="text-xs text-mitti-400 italic mt-2">This case is resolved. Comments are read-only.</p>
                             )}
                           </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                        </div>
+                      </div>
+                    </div>
                   </motion.div>
                 ))}
               </AnimatePresence>

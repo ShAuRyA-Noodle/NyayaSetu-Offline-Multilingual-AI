@@ -231,9 +231,175 @@ async def batch_summarize_schemes(request: BatchSummarizeRequest):
         raise map_module_error(e, "Summarizer")
 
 
+# ----------------------------------------------------------------------------
+# LLM-powered document formatter (with file cache)
+# ----------------------------------------------------------------------------
+FORMATTED_DOCS_DIR = os.path.join("data", "formatted_docs")
+os.makedirs(FORMATTED_DOCS_DIR, exist_ok=True)
+
+
+def _format_document_with_llm(raw_text: str) -> dict:
+    """
+    Use Ollama to transform raw scheme text into a structured JSON document
+    with title + sections containing paragraphs, bullets, and numbered lists.
+    Falls back to a single-paragraph structure if the LLM is unavailable.
+    """
+    system_prompt = (
+        "You are a document structuring assistant for an Indian government scheme portal. "
+        "Your ONLY job is to reformat a raw government scheme document into a clean, structured JSON "
+        "that will be rendered in a UI. You MUST preserve ALL factual information exactly — do NOT "
+        "summarize, shorten, omit, or invent details. Only reorganize and format the existing text."
+    )
+
+    user_prompt = f"""Reformat the following government scheme document into structured JSON.
+
+OUTPUT FORMAT (strict — output ONLY valid JSON, no markdown fences, no explanations):
+{{
+  "title": "Scheme name as a clean title",
+  "sections": [
+    {{
+      "heading": "SECTION NAME IN UPPERCASE",
+      "blocks": [
+        {{"type": "paragraph", "text": "A paragraph of text..."}},
+        {{"type": "bullets", "items": ["first bullet", "second bullet"]}},
+        {{"type": "numbered", "items": ["first step", "second step"]}}
+      ]
+    }}
+  ]
+}}
+
+RULES:
+1. Preserve EVERY fact, number, date, amount, and detail from the source. No summarization.
+2. Break the content into logical sections like: OVERVIEW, OBJECTIVES, BENEFITS, ELIGIBILITY, APPLICATION PROCESS, DOCUMENTS REQUIRED, CONTACT / HELPLINE, etc.
+3. Use "bullets" for unordered lists of features, criteria, or items.
+4. Use "numbered" for sequential steps or ordered processes.
+5. Use "paragraph" for descriptive/explanatory text.
+6. Section headings should be short (2–5 words), ALL UPPERCASE.
+7. Keep exact URLs, phone numbers, emails, and amounts verbatim.
+8. Output MUST be a single valid JSON object. No markdown. No extra text.
+
+RAW DOCUMENT:
+\"\"\"
+{raw_text}
+\"\"\"
+
+JSON OUTPUT:"""
+
+    try:
+        import requests as _requests
+
+        input_chars = len(raw_text)
+        needed_tokens = min(max(int(input_chars / 2), 4096), 16384)
+        logger.info(f"Formatting doc: {input_chars} chars, requesting {needed_tokens} max_tokens")
+
+        # Explicit JSON schema — Ollama's structured output mode enforces this shape.
+        json_schema = {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "sections": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "heading": {"type": "string"},
+                            "blocks": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "type": {"type": "string", "enum": ["paragraph", "bullets", "numbered"]},
+                                        "text": {"type": "string"},
+                                        "items": {"type": "array", "items": {"type": "string"}},
+                                    },
+                                    "required": ["type"],
+                                },
+                            },
+                        },
+                        "required": ["heading", "blocks"],
+                    },
+                },
+            },
+            "required": ["title", "sections"],
+        }
+
+        payload = {
+            "model": "qwen2.5:14b-instruct-q4_0",
+            "prompt": user_prompt,
+            "system": system_prompt,
+            "stream": False,
+            "format": json_schema,  # Structured output — enforces exact schema
+            "options": {
+                "temperature": 0.1,
+                "num_predict": needed_tokens,
+                "top_p": 0.9,
+            },
+        }
+        response = _requests.post(
+            "http://localhost:11434/api/generate",
+            json=payload,
+            timeout=300,
+        )
+        if response.status_code != 200:
+            raise RuntimeError(f"Ollama returned {response.status_code}: {response.text[:200]}")
+
+        result = response.json()
+        response_text = result.get("response", "").strip()
+        logger.info(f"LLM response length: {len(response_text)} chars")
+
+        if not response_text:
+            raise ValueError("Empty LLM response")
+
+        structured = json.loads(response_text)
+        if "title" not in structured or "sections" not in structured:
+            raise ValueError(f"LLM output missing required keys. Got: {list(structured.keys())}")
+        return structured
+    except Exception as e:
+        logger.warning(f"LLM formatting failed, returning raw fallback: {e}")
+        return {
+            "title": "",
+            "sections": [
+                {
+                    "heading": "DOCUMENT",
+                    "blocks": [{"type": "paragraph", "text": raw_text}],
+                }
+            ],
+            "_fallback": True,
+        }
+
+
+def _get_or_build_formatted_doc(scheme_id: str, raw_text: str) -> dict:
+    """Return cached formatted doc if source hash matches; otherwise regenerate."""
+    source_hash = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()[:16]
+    cache_path = os.path.join(FORMATTED_DOCS_DIR, f"{scheme_id}.json")
+
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, "r", encoding="utf-8") as f:
+                cached = json.load(f)
+            if cached.get("source_hash") == source_hash:
+                return cached["formatted"]
+        except Exception:
+            pass
+
+    formatted = _format_document_with_llm(raw_text)
+
+    # Only cache successful (non-fallback) outputs
+    if not formatted.get("_fallback"):
+        try:
+            with open(cache_path, "w", encoding="utf-8") as f:
+                json.dump({"source_hash": source_hash, "formatted": formatted}, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to write formatted-doc cache: {e}")
+
+    return formatted
+
+
 @router.get("/api/v1/schemes/by-name/{scheme_name}/document")
-async def get_scheme_document_by_name(scheme_name: str):
-    """Get the full scheme document text by scheme name (for citizens to read full scheme)."""
+async def get_scheme_document_by_name(scheme_name: str, formatted: bool = False):
+    """Get the full scheme document text by scheme name (for citizens to read full scheme).
+    Pass ?formatted=true to get an LLM-structured JSON response (cached).
+    """
     try:
         chunks_text = []
 
@@ -296,6 +462,30 @@ async def get_scheme_document_by_name(scheme_name: str):
             raise HTTPException(404, f"No document found for scheme '{scheme_name}'")
 
         full_document = "\n\n".join(chunks_text)
+
+        if formatted:
+            scheme_id = None
+            try:
+                with get_db() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "SELECT scheme_id FROM schemes_metadata WHERE scheme_name = ? LIMIT 1",
+                        (scheme_name,),
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        scheme_id = row["scheme_id"] if hasattr(row, "keys") else row[0]
+            except Exception:
+                pass
+            if not scheme_id:
+                scheme_id = generate_scheme_id(scheme_name)
+            fmt = _get_or_build_formatted_doc(scheme_id, full_document)
+            return {
+                "scheme_name": scheme_name,
+                "scheme_id": scheme_id,
+                "formatted": fmt,
+            }
+
         return {
             "scheme_name": scheme_name,
             "document": full_document,
@@ -420,31 +610,24 @@ async def update_scheme_metadata(
     """Update scheme metadata."""
     logger.info(f"Update metadata request: scheme_id={scheme_id}, body={body.dict(exclude_none=True)}, user={current_user.get('username')}/{current_user.get('role')}")
     try:
+        old_scheme_name = None
         with get_db() as conn:
             if not can_user_manage_scheme(current_user["id"], scheme_id, conn):
                 raise HTTPException(403, "Permission denied")
 
-            new_scheme_id = None
+            # Capture old name before rename so we can update RAG DB too
+            if body.scheme_name is not None:
+                cursor = conn.cursor()
+                cursor.execute("SELECT scheme_name FROM schemes_metadata WHERE scheme_id = ?", (scheme_id,))
+                row = cursor.fetchone()
+                if row:
+                    old_scheme_name = row[0] if isinstance(row, (list, tuple)) else row["scheme_name"]
+
             updates = []
             params = []
             if body.scheme_name is not None:
                 updates.append("scheme_name = ?")
                 params.append(body.scheme_name)
-                # Generate new scheme_id from the new name to prevent duplicates on re-upload
-                new_scheme_id = generate_scheme_id(body.scheme_name)
-                if new_scheme_id != scheme_id:
-                    # Check the new ID doesn't already exist (different scheme)
-                    cursor = conn.cursor()
-                    cursor.execute(
-                        "SELECT scheme_id FROM schemes_metadata WHERE scheme_id = ? AND scheme_id != ?",
-                        (new_scheme_id, scheme_id),
-                    )
-                    if cursor.fetchone():
-                        raise HTTPException(
-                            409, f"A scheme with a similar name already exists (ID conflict: {new_scheme_id})"
-                        )
-                    updates.append("scheme_id = ?")
-                    params.append(new_scheme_id)
             if body.tags is not None:
                 updates.append("tags = ?")
                 params.append(json.dumps(body.tags))
@@ -474,21 +657,21 @@ async def update_scheme_metadata(
                 params,
             )
 
-            # Update scheme_id in related tables if it changed
-            if new_scheme_id and new_scheme_id != scheme_id:
-                for table in ("scheme_chunks", "scheme_versions", "scheme_assignments", "upload_history"):
-                    try:
-                        conn.execute(
-                            f"UPDATE {table} SET scheme_id = ? WHERE scheme_id = ?",
-                            (new_scheme_id, scheme_id),
-                        )
-                    except Exception:
-                        pass  # Table may not have records for this scheme
+        # Also update scheme_name in the RAG engine's schemes table
+        # (list_schemes reads from both DBs — stale name here causes duplicates)
+        if body.scheme_name is not None and old_scheme_name and old_scheme_name != body.scheme_name:
+            try:
+                rag_engine = get_rag_engine()
+                with get_db(rag_engine.db_path) as rag_conn:
+                    rag_conn.execute(
+                        "UPDATE schemes SET scheme_name = ? WHERE scheme_name = ?",
+                        (body.scheme_name, old_scheme_name),
+                    )
+                    rag_conn.commit()
+            except Exception as e:
+                logger.warning(f"Failed to update RAG schemes table: {e}")
 
-            conn.commit()
-
-        final_id = new_scheme_id if new_scheme_id and new_scheme_id != scheme_id else scheme_id
-        return {"success": True, "scheme_id": final_id}
+        return {"success": True, "scheme_id": scheme_id}
     except HTTPException:
         raise
     except Exception as e:

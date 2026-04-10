@@ -80,8 +80,9 @@
 }
 
 @keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 8px var(--mitti-glow), 0 0 20px var(--mitti-glow); }
-  50% { box-shadow: 0 0 16px var(--mitti-glow), 0 0 40px var(--haldi-glow); }
+  /* Use opacity instead of box-shadow — GPU composited, no layout recalc */
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
 }
 
 @keyframes draw-line {
@@ -246,11 +247,11 @@
            rounded-2xl;
     box-shadow: var(--shadow-card);
     position: relative;
-    transition: box-shadow var(--duration-normal) var(--ease-out-quart),
-                transform var(--duration-normal) var(--ease-out-quart);
+    /* Only animate transform — box-shadow animating causes GPU recomposite every frame */
+    transition: transform var(--duration-normal) var(--ease-out-quart);
   }
   .village-card:hover {
-    box-shadow: var(--shadow-elevated);
+    transform: translateY(-1px);
   }
 
   .village-card-subtle {
@@ -286,6 +287,13 @@
            border-r border-mitti-200/30 dark:border-night-border/40;
   }
 
+  /* Header scroll state — static blur, no per-frame recompute */
+  .header-scrolled {
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: 0 1px 12px rgba(58, 34, 14, 0.06);
+  }
+
   /* ---- GRAIN OVERLAY (/bolder) ---- */
   .grain-overlay {
     position: relative;
@@ -308,18 +316,13 @@
            text-white font-semibold py-3 px-6
            rounded-xl;
     box-shadow: var(--shadow-card);
-    transition: all var(--duration-normal) var(--ease-out-quart);
+    transition: transform var(--duration-normal) var(--ease-out-quart),
+                opacity var(--duration-normal) var(--ease-out-quart);
     position: relative;
     overflow: hidden;
   }
-  .btn-mitti:hover {
-    box-shadow: var(--shadow-elevated);
-    transform: translateY(-2px);
-  }
-  .btn-mitti:active {
-    transform: translateY(1px);
-    box-shadow: var(--shadow-card);
-  }
+  .btn-mitti:hover { transform: translateY(-2px); }
+  .btn-mitti:active { transform: translateY(1px); }
 
   .btn-haldi {
     @apply bg-gradient-to-r from-haldi-400 to-haldi-500
@@ -327,17 +330,13 @@
            text-white font-semibold py-3 px-6
            rounded-xl;
     box-shadow: var(--shadow-card);
-    transition: all var(--duration-normal) var(--ease-out-quart);
+    transition: transform var(--duration-normal) var(--ease-out-quart),
+                opacity var(--duration-normal) var(--ease-out-quart);
     position: relative;
     overflow: hidden;
   }
-  .btn-haldi:hover {
-    box-shadow: var(--shadow-elevated);
-    transform: translateY(-2px);
-  }
-  .btn-haldi:active {
-    transform: translateY(1px);
-  }
+  .btn-haldi:hover { transform: translateY(-2px); }
+  .btn-haldi:active { transform: translateY(1px); }
 
   .btn-neel {
     @apply bg-gradient-to-r from-neel-500 to-neel-600
@@ -345,17 +344,13 @@
            text-white font-semibold py-3 px-6
            rounded-xl;
     box-shadow: var(--shadow-card);
-    transition: all var(--duration-normal) var(--ease-out-quart);
+    transition: transform var(--duration-normal) var(--ease-out-quart),
+                opacity var(--duration-normal) var(--ease-out-quart);
     position: relative;
     overflow: hidden;
   }
-  .btn-neel:hover {
-    box-shadow: var(--shadow-elevated);
-    transform: translateY(-2px);
-  }
-  .btn-neel:active {
-    transform: translateY(1px);
-  }
+  .btn-neel:hover { transform: translateY(-2px); }
+  .btn-neel:active { transform: translateY(1px); }
 
   /* Backward compat buttons */
   .btn-saffron {
@@ -364,17 +359,13 @@
            text-white font-semibold py-3 px-6
            rounded-xl;
     box-shadow: var(--shadow-card);
-    transition: all var(--duration-normal) var(--ease-out-quart);
+    transition: transform var(--duration-normal) var(--ease-out-quart),
+                opacity var(--duration-normal) var(--ease-out-quart);
     position: relative;
     overflow: hidden;
   }
-  .btn-saffron:hover {
-    box-shadow: var(--shadow-elevated);
-    transform: translateY(-2px);
-  }
-  .btn-saffron:active {
-    transform: translateY(1px);
-  }
+  .btn-saffron:hover { transform: translateY(-2px); }
+  .btn-saffron:active { transform: translateY(1px); }
 
   .btn-green {
     @apply bg-gradient-to-r from-india-green-500 to-india-green-600
@@ -382,17 +373,13 @@
            text-white font-semibold py-3 px-6
            rounded-xl;
     box-shadow: var(--shadow-card);
-    transition: all var(--duration-normal) var(--ease-out-quart);
+    transition: transform var(--duration-normal) var(--ease-out-quart),
+                opacity var(--duration-normal) var(--ease-out-quart);
     position: relative;
     overflow: hidden;
   }
-  .btn-green:hover {
-    box-shadow: var(--shadow-elevated);
-    transform: translateY(-2px);
-  }
-  .btn-green:active {
-    transform: translateY(1px);
-  }
+  .btn-green:hover { transform: translateY(-2px); }
+  .btn-green:active { transform: translateY(1px); }
 
   .btn-outline-saffron {
     @apply border-2 border-mitti-500 text-mitti-600 dark:text-mitti-400

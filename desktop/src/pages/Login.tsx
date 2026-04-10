@@ -220,15 +220,18 @@ const Login: React.FC = () => {
                 >{t('login.registerTab')}</button>
               </div>
 
-              {error && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl relative z-10"
-                >
-                  <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-                </motion.div>
-              )}
+              <div style={{
+                display: 'grid',
+                gridTemplateRows: error ? '1fr' : '0fr',
+                transition: 'grid-template-rows 0.22s cubic-bezier(0.25, 1, 0.5, 1)',
+              }}>
+                <div className="overflow-hidden">
+                  <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl relative z-10"
+                    style={{ opacity: error ? 1 : 0, transition: 'opacity 0.15s ease' }}>
+                    <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+                  </div>
+                </div>
+              </div>
 
               <div className="relative z-10">
                 {isLogin ? (
@@ -289,8 +292,13 @@ const Login: React.FC = () => {
                     </div>
 
                     {/* Officer Code */}
-                    {selectedRole === 'officer' && (
-                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateRows: selectedRole === 'officer' ? '1fr' : '0fr',
+                      transition: 'grid-template-rows 0.25s cubic-bezier(0.25, 1, 0.5, 1)',
+                    }}>
+                      <div className="overflow-hidden">
+                      <div style={{ opacity: selectedRole === 'officer' ? 1 : 0, transition: 'opacity 0.2s ease' }}>
                         <label className="block text-sm font-medium text-mitti-700 dark:text-mitti-300 mb-2">{t('login.officerCode')} *</label>
                         <div className="relative">
                           <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 text-neel-400 w-5 h-5" />
@@ -298,7 +306,7 @@ const Login: React.FC = () => {
                             className={`${inputClass} font-mono tracking-widest ${
                               codeValidation?.valid ? '!border-india-green-500 !ring-india-green-500/50' : codeValidation?.valid === false ? '!border-red-500' : ''
                             }`}
-                            placeholder={t('login.enterCode')} required maxLength={8} />
+                            placeholder={t('login.enterCode')} maxLength={8} />
                           {validatingCode && <div className="absolute right-3 top-1/2 -translate-y-1/2"><ThemedSpinner size="sm" /></div>}
                         </div>
                         {codeValidation && (
@@ -312,8 +320,9 @@ const Login: React.FC = () => {
                               : <span>{codeValidation.message || t('login.codeInvalid')}</span>}
                           </div>
                         )}
-                      </motion.div>
-                    )}
+                      </div>
+                      </div>
+                    </div>
 
                     <div>
                       <label className="block text-sm font-medium text-mitti-700 dark:text-mitti-300 mb-2">{t('login.username')} *</label>

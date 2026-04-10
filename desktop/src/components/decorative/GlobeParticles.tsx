@@ -30,7 +30,7 @@ const GlobeParticles: React.FC<GlobeParticlesProps> = ({ className = '' }) => {
     canvas.height = rect.height * dpr;
 
     const area = canvas.width * canvas.height;
-    const count = Math.min(Math.floor(area / 1200), 30000);
+    const count = Math.min(Math.floor(area / 6000), 800);
     countRef.current = count;
     const globeRadius = Math.max(canvas.width, canvas.height) * 0.4;
 
@@ -67,6 +67,14 @@ const GlobeParticles: React.FC<GlobeParticlesProps> = ({ className = '' }) => {
       dpr,
     };
   }, []);
+
+  // Pre-allocate per-frame buffers once to avoid GC pressure
+  const frameBuffers = useRef<{
+    colorOpacitySum: Float64Array;
+    colorWidthSum: Float64Array;
+    colorCountArr: Uint32Array;
+    colorPathData: Float32Array;
+  } | null>(null);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -116,10 +124,20 @@ const GlobeParticles: React.FC<GlobeParticlesProps> = ({ className = '' }) => {
 
     const mouseActive = sm.x > -1000;
     const numColors = COLORS.length;
-    const colorOpacitySum = new Float64Array(numColors);
-    const colorWidthSum = new Float64Array(numColors);
-    const colorCountArr = new Uint32Array(numColors);
-    const colorPathData = new Float32Array(count * 4);
+
+    // Reuse pre-allocated buffers — no GC allocation per frame
+    if (!frameBuffers.current || frameBuffers.current.colorPathData.length !== count * 4) {
+      frameBuffers.current = {
+        colorOpacitySum: new Float64Array(numColors),
+        colorWidthSum: new Float64Array(numColors),
+        colorCountArr: new Uint32Array(numColors),
+        colorPathData: new Float32Array(count * 4),
+      };
+    }
+    const { colorOpacitySum, colorWidthSum, colorCountArr, colorPathData } = frameBuffers.current;
+    colorOpacitySum.fill(0);
+    colorWidthSum.fill(0);
+    colorCountArr.fill(0);
 
     for (let i = 0; i < count; i++) {
       const bx = baseX[i];
@@ -240,6 +258,15 @@ const GlobeParticles: React.FC<GlobeParticlesProps> = ({ className = '' }) => {
       mouseRef.current = { x: -9999, y: -9999 };
     };
 
+    // Pause animation when tab is hidden to save CPU
+    const handleVisibility = () => {
+      if (document.hidden) {
+        cancelAnimationFrame(animFrameRef.current);
+      } else {
+        animFrameRef.current = requestAnimationFrame(draw);
+      }
+    };
+
     let resizeTimer: ReturnType<typeof setTimeout>;
     const handleResize = () => {
       clearTimeout(resizeTimer);
@@ -252,11 +279,13 @@ const GlobeParticles: React.FC<GlobeParticlesProps> = ({ className = '' }) => {
     parent?.addEventListener('mousemove', handleMouseMove, { passive: true });
     parent?.addEventListener('mouseleave', handleMouseLeave);
     window.addEventListener('resize', handleResize, { passive: true });
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       parent?.removeEventListener('mousemove', handleMouseMove);
       parent?.removeEventListener('mouseleave', handleMouseLeave);
       window.removeEventListener('resize', handleResize);
+      document.removeEventListener('visibilitychange', handleVisibility);
       clearTimeout(resizeTimer);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };

@@ -96,6 +96,9 @@ export const apiService = {
   getSchemeDocument: async (schemeName: string) =>
     (await api.get(`/api/v1/schemes/by-name/${encodeURIComponent(schemeName)}/document`)).data,
 
+  getSchemeDocumentFormatted: async (schemeName: string) =>
+    (await api.get(`/api/v1/schemes/by-name/${encodeURIComponent(schemeName)}/document`, { params: { formatted: true }, timeout: 120000 })).data,
+
   updateSchemeMetadata: async (schemeId: string, data: Record<string, any>) =>
     (await api.put(`/api/v1/schemes/${schemeId}/metadata`, data)).data,
 

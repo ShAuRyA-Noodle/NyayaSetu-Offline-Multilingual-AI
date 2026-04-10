@@ -134,15 +134,10 @@ const FloatingParticles: React.FC<FloatingParticlesProps> = ({
         const alpha = p.opacity * lifeOpacity;
 
         if (dark) {
-          // Dark mode: warm golden firefly particles with glow halo
-          const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * 4);
-          gradient.addColorStop(0, `hsla(${p.hue}, 80%, 65%, ${alpha})`);
-          gradient.addColorStop(0.4, `hsla(${p.hue}, 70%, 55%, ${alpha * 0.4})`);
-          gradient.addColorStop(1, `hsla(${p.hue}, 60%, 45%, 0)`);
-
+          // Dark mode: warm golden firefly — simple glow (no gradient per particle)
           ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size * 4, 0, Math.PI * 2);
-          ctx.fillStyle = gradient;
+          ctx.arc(p.x, p.y, p.size * 2.5, 0, Math.PI * 2);
+          ctx.fillStyle = `hsla(${p.hue}, 70%, 55%, ${alpha * 0.3})`;
           ctx.fill();
 
           // Core bright dot
@@ -178,7 +173,7 @@ const FloatingParticles: React.FC<FloatingParticlesProps> = ({
     <canvas
       ref={canvasRef}
       className={`fixed inset-0 pointer-events-none ${className}`}
-      style={{ zIndex: 0 }}
+      style={{ zIndex: 0, willChange: 'auto' }}
       aria-hidden="true"
     />
   );

@@ -19,36 +19,36 @@ const variants: Record<TransitionVariant, {
   transition: Transition;
   exitTransition?: Transition;
 }> = {
-  // Default: slide up with blur-clear
+  // Default: slide up — no blur (blur is expensive on every route change)
   default: {
     variants: {
-      initial: { opacity: 0, y: 30, filter: 'blur(6px)' },
-      animate: { opacity: 1, y: 0, filter: 'blur(0px)' },
-      exit: { opacity: 0, y: -15, filter: 'blur(4px)' },
+      initial: { opacity: 0, y: 16 },
+      animate: { opacity: 1, y: 0 },
+      exit: { opacity: 0, y: -8 },
     },
     transition: {
-      duration: 0.5,
+      duration: 0.25,
       ease: [...easeOutQuart],
     },
     exitTransition: {
-      duration: 0.35, // Exit faster than enter
+      duration: 0.18,
       ease: [...easeOutQuart],
     },
   },
 
-  // Hero: scale + fade for impactful pages (Login, Dashboard)
+  // Hero: scale + fade — no blur
   hero: {
     variants: {
-      initial: { opacity: 0, scale: 0.96, filter: 'blur(8px)' },
-      animate: { opacity: 1, scale: 1, filter: 'blur(0px)' },
-      exit: { opacity: 0, scale: 1.02, filter: 'blur(6px)' },
+      initial: { opacity: 0, scale: 0.97 },
+      animate: { opacity: 1, scale: 1 },
+      exit: { opacity: 0, scale: 1.01 },
     },
     transition: {
-      duration: 0.6,
+      duration: 0.3,
       ease: [...easeOutQuint],
     },
     exitTransition: {
-      duration: 0.4,
+      duration: 0.2,
       ease: [...easeOutQuart],
     },
   },

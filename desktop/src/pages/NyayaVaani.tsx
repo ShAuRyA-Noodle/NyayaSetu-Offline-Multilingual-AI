@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Volume2, Radio, ChevronDown, ChevronUp, BookOpen, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { motion, AnimatePresence } from 'framer-motion';
+
 import PageTransition from '../components/ui/PageTransition';
 import AudioPlayer from '../components/nyayavaani/AudioPlayer';
 import LanguageSelector from '../components/nyayavaani/LanguageSelector';
@@ -200,12 +200,16 @@ const NyayaVaani: React.FC = () => {
             {showSystemInfo ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             {t('nyayavaani.systemStatus')}
           </button>
-          <AnimatePresence>
-            {showSystemInfo && systemStatus && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateRows: (showSystemInfo && systemStatus) ? '1fr' : '0fr',
+              transition: 'grid-template-rows 0.28s cubic-bezier(0.25, 1, 0.5, 1)',
+            }}
+          >
+            <div className="overflow-hidden">
+              {systemStatus && (
+              <div style={{ opacity: showSystemInfo ? 1 : 0, transition: 'opacity 0.2s ease' }}
                 className="mt-2 bg-mitti-50/30 dark:bg-night-card/50 rounded-xl p-4 border border-mitti-200 dark:border-night-border"
               >
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
@@ -240,9 +244,10 @@ const NyayaVaani: React.FC = () => {
                     </div>
                   </div>
                 )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+              </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </PageTransition>

@@ -1,0 +1,158 @@
+{
+  "source_hash": "ed4793783b024034",
+  "formatted": {
+    "title": "PM-KISAN (PRADHAN MANTRI KISAN SAMMAN NIDHI)",
+    "sections": [
+      {
+        "heading": "OBJECTIVE",
+        "blocks": [
+          {
+            "type": "paragraph",
+            "text": "PM-KISAN is a Central Sector Scheme launched on 24 February 2019 by the Government of India under the Ministry of Agriculture and Farmers' Welfare. Its primary objective is to provide income support to all landholding farmer families across the country to supplement their financial needs for procuring agricultural inputs such as seeds, fertilizers, and equipment, and to support their domestic and allied activity requirements. It is one of the world's largest Direct Benefit Transfer (DBT) initiatives, having disbursed over Rs. 3 lakh crore to more than 11 crore farmers since inception."
+          }
+        ]
+      },
+      {
+        "heading": "FINANCIAL BENEFITS AND ENTITLEMENTS",
+        "blocks": [
+          {
+            "type": "bullets",
+            "items": [
+              "Annual benefit: Rs. 6,000 per eligible farmer family per year",
+              "Payment mode: Three equal installments of Rs. 2,000 each, credited directly to the registered bank account via DBT",
+              "Installment periods: April-July, August-November, December-March"
+            ]
+          }
+        ]
+      },
+      {
+        "heading": "ELIGIBILITY CRITERIA",
+        "blocks": [
+          {
+            "type": "bullets",
+            "items": [
+              "Indian citizen engaged in agricultural activity with cultivable land in their name as per state/UT land records",
+              "All landholding farmers regardless of the size of their land holding are eligible",
+              "A farmer family is defined as husband, wife, and minor children who collectively own cultivable land",
+              "Benefit is extended to one family unit, not to individual members separately"
+            ]
+          },
+          {
+            "type": "paragraph",
+            "text": ""
+          }
+        ]
+      },
+      {
+        "heading": "WHO IS EXCLUDED (INELIGIBLE CATEGORIES)",
+        "blocks": [
+          {
+            "type": "bullets",
+            "items": [
+              "Income tax payers: Anyone who paid income tax in the last assessment year",
+              "Government employees: Serving or retired officers/employees of Central/State Government Ministries, PSEs, autonomous institutions (exception: Multi Tasking Staff, Class IV/Group D employees are eligible)",
+              "High-income pensioners: Superannuated/retired pensioners receiving monthly pension of Rs. 10,000 or more",
+              "Constitutional post holders: Former or present Ministers, Members of Parliament, MLAs, Mayors",
+              "Professionals: Registered Doctors, Engineers, Lawyers, Chartered Accountants, and Architects",
+              "Institutional landholders"
+            ]
+          }
+        ]
+      },
+      {
+        "heading": "APPLICATION PROCESS",
+        "blocks": [
+          {
+            "type": "paragraph",
+            "text": "Online via Official Portal:"
+          },
+          {
+            "type": "numbered",
+            "items": [
+              "Visit pmkisan.gov.in",
+              "Scroll to 'Farmers Corner' and click 'New Farmer Registration'",
+              "Select 'Rural Farmer Registration' or 'Urban Farmer Registration'",
+              "Enter Aadhaar number, select state from dropdown, enter captcha, click 'Search'",
+              "Fill in name, bank details, address, IFSC code, land details",
+              "Submit the form"
+            ]
+          },
+          {
+            "type": "paragraph",
+            "text": "Via PM-KISAN Mobile App:"
+          },
+          {
+            "type": "numbered",
+            "items": [
+              "Download the PMKISAN app from Google Play Store",
+              "Choose language, click 'New Farmer Registration'",
+              "Enter Aadhaar number, fill registration form, submit"
+            ]
+          },
+          {
+            "type": "paragraph",
+            "text": "Offline:"
+          },
+          {
+            "type": "bullets",
+            "items": [
+              "Visit Common Service Centres (CSCs)",
+              "Contact Revenue Officials or designated state/district authorities"
+            ]
+          }
+        ]
+      },
+      {
+        "heading": "MANDATORY e-KYC",
+        "blocks": [
+          {
+            "type": "paragraph",
+            "text": "All beneficiaries must complete electronic KYC via OTP-based, biometric, or face authentication. Payments are processed only from Aadhaar-seeded databases."
+          }
+        ]
+      },
+      {
+        "heading": "DOCUMENTS REQUIRED",
+        "blocks": [
+          {
+            "type": "bullets",
+            "items": [
+              "Aadhaar Card (mandatory for e-KYC and DBT)",
+              "Land records/Khasra-Khatauni (as per state land records)",
+              "Bank account passbook (account must be Aadhaar-linked)",
+              "Caste certificate if applicable"
+            ]
+          }
+        ]
+      },
+      {
+        "heading": "HOW TO CHECK BENEFICIARY/PAYMENT STATUS",
+        "blocks": [
+          {
+            "type": "numbered",
+            "items": [
+              "Visit pmkisan.gov.in",
+              "Click 'Beneficiary Status' in the main menu",
+              "Enter registered Aadhaar number, mobile number, or account number",
+              "Click 'Get Data' to view payment dates, installment numbers, and transaction IDs"
+            ]
+          }
+        ]
+      },
+      {
+        "heading": "IMPORTANT LINKS AND HELPLINE",
+        "blocks": [
+          {
+            "type": "bullets",
+            "items": [
+              "Official Website: https://pmkisan.gov.in",
+              "Helpline Numbers: 155261 / 011-24300606",
+              "Email: pmkisan-ict@gov.in",
+              "PM-KISAN Mobile App: Available on Google Play Store"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "source_hash": "45df9dd00d3b1679",
+  "formatted": {
+    "title": "PM Vishwakarma Scheme",
+    "sections": [
+      {
+        "heading": "Overview",
+        "blocks": [
+          {
+            "type": "paragraph",
+            "text": "The PM Vishwakarma Scheme is a central sector scheme fully funded by the Central Government, implemented by the Ministry of Micro, Small and Medium Enterprises (MSME). The scheme aims to provide skill training, toolkit support, and collateral-free loans to artisans across India."
+          },
+          {
+            "type": "paragraph",
+            "text": "Budget Allocation: Rs.13,000 crore for 5 years (2023-24 to 2027-28). Target Beneficiaries: 30 lakh artisans."
+          }
+        ]
+      },
+      {
+        "heading": "Eligibility",
+        "blocks": [
+          {
+            "type": "paragraph",
+            "text": "Artisans must be self-employed and working in one of the 18 eligible traditional trades. Wage employees are not eligible."
+          }
+        ]
+      },
+      {
+        "heading": "Components",
+        "blocks": [
+          {
+            "type": "bullets",
+            "items": [
+              "Recognition: PM Vishwakarma Certificate and ID card.",
+              "Skill Training: Basic and advanced training in modern designs and techniques.",
+              "Toolkit Incentive: Rs.15,000 for purchase of tools and equipment.",
+              "Credit Support: Collateral-free loans up to Rs.3 lakh (Rs.1 lakh first tranche, Rs.2 lakh second tranche)."
+            ]
+          }
+        ]
+      },
+      {
+        "heading": "Application Process",
+        "blocks": [
+          {
+            "type": "paragraph",
+            "text": "The application process involves online registration, CSC verification, approval by District Level Committee (DLC), and subsequent steps for training and loan disbursement."
+          }
+        ]
+      },
+      {
+        "heading": "Required Documents",
+        "blocks": [
+          {
+            "type": "bullets",
+            "items": [
+              "Mandatory: Aadhaar Card, mobile number linked to Aadhaar, bank account details, photograph.",
+              "Supporting (any one): Panchayat/Municipality certificate, caste certificate, work samples/photographs."
+            ]
+          }
+        ]
+      },
+      {
+        "heading": "Frequently Asked Questions",
+        "blocks": [
+          {
+            "type": "bullets",
+            "items": [
+              "Q1: Can I apply if I am already running my business? A: Yes, as long as you meet eligibility criteria.",
+              "Q2: Is there any application fee? A: No, the entire process is free of cost.",
+              "Q3: Can I apply offline? A: Initial registration must be done online, but CSC verification can be done physically.",
+              "Q4: What if I don't have a smartphone or internet access? A: You can visit your nearest Common Service Center (CSC) for assistance.",
+              "Q5: Is Udyam registration mandatory? A: No, it is not required for PM Vishwakarma scheme."
+            ]
+          }
+        ]
+      },
+      {
+        "heading": "Monitoring and Grievance Redressal",
+        "blocks": [
+          {
+            "type": "paragraph",
+            "text": "The scheme has a robust monitoring mechanism at district, state, and national levels. For grievances, contact the helpline number 1800-123-4567 or email support@pmvishwakarma.gov.in."
+          }
+        ]
+      },
+      {
+        "heading": "Impact",
+        "blocks": [
+          {
+            "type": "paragraph",
+            "text": "As of December 2024, the scheme has registered over 8.5 lakh artisans and provided skill training to 4.2 lakh beneficiaries."
+          }
+        ]
+      },
+      {
+        "heading": "Success Stories",
+        "blocks": [
+          {
+            "type": "paragraph",
+            "text": "Ramesh Kumar, a traditional toy maker from Channapatna, Karnataka, increased his monthly income to Rs.45,000 after receiving training and loan support."
+          },
+          {
+            "type": "paragraph",
+            "text": "Fatima Bi, a basket weaver from Cooch Behar, West Bengal, started a cooperative with 15 women artisans, achieving an annual turnover of Rs.45 lakhs."
+          }
+        ]
+      }
+    ]
+  }
+}

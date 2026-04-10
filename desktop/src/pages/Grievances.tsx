@@ -415,15 +415,15 @@ const MyGrievancesTab: React.FC = () => {
             </div>
           </div>
 
-          <AnimatePresence>
-            {expandedId === g.grievance_id && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.3 }}
-                className="overflow-hidden"
-              >
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateRows: expandedId === g.grievance_id ? '1fr' : '0fr',
+              transition: 'grid-template-rows 0.28s cubic-bezier(0.25, 1, 0.5, 1)',
+            }}
+          >
+            <div className="overflow-hidden">
+              <div style={{ opacity: expandedId === g.grievance_id ? 1 : 0, transition: 'opacity 0.2s ease' }}>
                 <div className="border-t border-gray-200 dark:border-gray-700 p-5 space-y-5">
 
                   {/* ---- PROGRESS STEPPER ---- */}
@@ -577,9 +577,9 @@ const MyGrievancesTab: React.FC = () => {
                     )}
                   </div>
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              </div>
+            </div>
+          </div>
         </motion.div>
         );
       })}
@@ -766,15 +766,15 @@ const DepartmentInboxTab: React.FC = () => {
                 {expandedId === g.grievance_id ? t('grievances.hideComments', 'Hide Comments') : t('grievances.showComments', 'Show Comments')}
               </button>
 
-              <AnimatePresence>
-                {expandedId === g.grievance_id && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="overflow-hidden"
-                  >
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateRows: expandedId === g.grievance_id ? '1fr' : '0fr',
+                  transition: 'grid-template-rows 0.28s cubic-bezier(0.25, 1, 0.5, 1)',
+                }}
+              >
+                <div className="overflow-hidden">
+                  <div style={{ opacity: expandedId === g.grievance_id ? 1 : 0, transition: 'opacity 0.2s ease' }}>
                     <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 space-y-2">
                       {(comments[g.grievance_id] || []).map((c: any) => (
                         <div key={c.id} className="p-2 bg-gray-50 dark:bg-night-card/50 rounded-lg">
@@ -794,9 +794,9 @@ const DepartmentInboxTab: React.FC = () => {
                           className="px-3 py-1.5 bg-mitti-500 text-white rounded-lg text-sm font-medium hover:bg-mitti-600">{t('common.send', 'Send')}</button>
                       </div>
                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                  </div>
+                </div>
+              </div>
             </div>
           </motion.div>
         ))}
@@ -977,15 +977,15 @@ const MyCasesTab: React.FC = () => {
               {expandedId === g.grievance_id ? t('grievances.hideComments', 'Hide Comments') : t('grievances.comments', 'Comments')}
             </button>
 
-            <AnimatePresence>
-              {expandedId === g.grievance_id && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="overflow-hidden"
-                >
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateRows: expandedId === g.grievance_id ? '1fr' : '0fr',
+                transition: 'grid-template-rows 0.28s cubic-bezier(0.25, 1, 0.5, 1)',
+              }}
+            >
+              <div className="overflow-hidden">
+                <div style={{ opacity: expandedId === g.grievance_id ? 1 : 0, transition: 'opacity 0.2s ease' }}>
                   <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 space-y-2">
                     {(comments[g.grievance_id] || []).map((c: any) => (
                       <div key={c.id} className="p-2 bg-gray-50 dark:bg-night-card/50 rounded-lg">
@@ -1005,9 +1005,9 @@ const MyCasesTab: React.FC = () => {
                         className="px-3 py-1.5 bg-mitti-500 text-white rounded-lg text-sm font-medium hover:bg-mitti-600">{t('common.send', 'Send')}</button>
                     </div>
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                </div>
+              </div>
+            </div>
           </motion.div>
         ))}
       </div>
@@ -1167,16 +1167,16 @@ const AllGrievancesTab: React.FC = () => {
               </div>
 
               {/* Expanded Detail View */}
-              <AnimatePresence>
-                {expandedId === g.grievance_id && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
-                    className="overflow-hidden"
-                    onClick={(e) => e.stopPropagation()}
-                  >
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateRows: expandedId === g.grievance_id ? '1fr' : '0fr',
+                  transition: 'grid-template-rows 0.28s cubic-bezier(0.25, 1, 0.5, 1)',
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="overflow-hidden">
+                  <div style={{ opacity: expandedId === g.grievance_id ? 1 : 0, transition: 'opacity 0.2s ease' }}>
                     <div className="mt-4 pt-4 border-t border-mitti-200/30 dark:border-night-border/40">
                       {detailLoading ? (
                         <div className="flex items-center justify-center py-6">
@@ -1299,9 +1299,9 @@ const AllGrievancesTab: React.FC = () => {
                         <p className="text-sm text-mitti-500 py-4 text-center">Could not load details.</p>
                       )}
                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                  </div>
+                </div>
+              </div>
             </motion.div>
           ))}
         </div>
