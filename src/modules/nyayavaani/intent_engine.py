@@ -1,5 +1,6 @@
 """
-Intent Engine — Classify user voice intents and extract entities using sarvam-m-tools.
+Intent Engine — Classify user voice intents and extract entities.
+Uses the shared LLM client (Groq cloud or Ollama local).
 """
 
 import json
@@ -8,10 +9,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Optional
 
-import httpx
-
 from .config import NyayaVaaniConfig
-from .language_registry import LanguageRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -51,41 +49,43 @@ class IntentEngine:
     def __init__(self, config: NyayaVaaniConfig):
         self.config = config
 
+    def _get_llm_client(self):
+        from src.generation.llm_client import create_client
+        return create_client()
+
     async def classify_intent(self, text: str, language: str = "hi") -> IntentResult:
         """Classify user intent from transcribed text."""
-        prompt = f"""You are an intent classifier for a government services platform (NyayaSetu).
-Classify the following citizen's speech into one of these intents:
-- submit_grievance: citizen wants to file a complaint
-- check_status: citizen wants to check grievance status
+        prompt = f"""You are an intent classifier for an Indian government services platform (NyayaSetu).
+The citizen is speaking in {language}. Classify their speech into one of these intents:
+- submit_grievance: citizen wants to file a complaint or report a problem
+- check_status: citizen wants to check grievance/application status
 - browse_schemes: citizen wants to know about government schemes
 - ask_eligibility: citizen asking about eligibility for a scheme
-- hear_notice: citizen wants to hear/read notices
-- general_query: general question
+- hear_notice: citizen wants to hear/read official notices
+- general_query: general question about government services
 - unclear: cannot determine intent
 
 Also extract entities like: scheme_name, grievance_id, department, location, category.
 
-Citizen's text (language: {language}):
+Citizen's text:
 "{text}"
 
 Return ONLY a JSON object:
 {{"intent": "one_of_the_intents", "confidence": 0.0_to_1.0, "entities": {{"key": "value"}}}}"""
 
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    f"{self.config.ollama_base_url}/api/generate",
-                    json={
-                        "model": self.config.sarvam_m_model,
-                        "prompt": prompt,
-                        "stream": False,
-                        "options": {"temperature": 0.1, "num_predict": 300},
-                    },
-                )
-                response.raise_for_status()
-                data = response.json()
+            client = self._get_llm_client()
+            result = client.generate(
+                prompt=prompt,
+                system_prompt="You are a multilingual intent classifier for Indian government services. You understand Hindi, Tamil, Bengali, Telugu, Marathi, Gujarati, Kannada, Malayalam, Punjabi, Odia, Assamese, Urdu, and English. Return ONLY valid JSON.",
+                temperature=0.1,
+                max_tokens=300,
+            )
 
-            raw = data.get("response", "").strip()
+            if not result.get("success"):
+                raise RuntimeError(result.get("error", "LLM failed"))
+
+            raw = result["response"].strip()
             parsed = self._parse_json_response(raw)
 
             intent = parsed.get("intent", "unclear")
@@ -121,20 +121,18 @@ Return ONLY a JSON object:
 }}"""
 
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    f"{self.config.ollama_base_url}/api/generate",
-                    json={
-                        "model": self.config.sarvam_m_model,
-                        "prompt": prompt,
-                        "stream": False,
-                        "options": {"temperature": 0.1, "num_predict": 400},
-                    },
-                )
-                response.raise_for_status()
-                data = response.json()
+            client = self._get_llm_client()
+            result = client.generate(
+                prompt=prompt,
+                system_prompt="You are an Indian government grievance analyst. Extract structured data from citizen complaints in any Indian language. Return ONLY valid JSON.",
+                temperature=0.1,
+                max_tokens=400,
+            )
 
-            raw = data.get("response", "").strip()
+            if not result.get("success"):
+                raise RuntimeError(result.get("error", "LLM failed"))
+
+            raw = result["response"].strip()
             parsed = self._parse_json_response(raw)
 
             return VoiceGrievanceData(
@@ -161,7 +159,6 @@ Return ONLY a JSON object:
             return json.loads(raw)
         except json.JSONDecodeError:
             pass
-        # Try extracting JSON block
         json_match = re.search(r'\{[\s\S]*\}', raw)
         if json_match:
             try:

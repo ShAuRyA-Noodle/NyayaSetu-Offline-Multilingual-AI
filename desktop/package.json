@@ -8,6 +8,8 @@
     "dev:vite": "vite",
     "dev:electron": "wait-on http://localhost:5173 && electron .",
     "build": "tsc && vite build",
+    "build:web": "vite build --base=/",
+    "build:electron": "vite build --base=./",
     "preview": "vite preview"
   },
   "dependencies": {

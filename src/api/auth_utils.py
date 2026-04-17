@@ -90,7 +90,7 @@ def authenticate_user(username: str, password: str) -> Optional[Dict[str, Any]]:
                    department, designation, assigned_schemes,
                    location, preferred_language, is_active
             FROM users
-            WHERE (username = ? OR email = ?) AND is_active = 1
+            WHERE (username = ? OR email = ?) AND is_active = TRUE
         """, (username, username))
 
         user = cursor.fetchone()
@@ -122,7 +122,7 @@ def get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
             SELECT id, username, email, role, department, designation,
                    assigned_schemes, location, preferred_language, is_active
             FROM users
-            WHERE id = ? AND is_active = 1
+            WHERE id = ? AND is_active = TRUE
         """, (user_id,))
 
         user = cursor.fetchone()
@@ -209,7 +209,7 @@ def invalidate_session(token: str):
     """Invalidate a session token."""
     with get_db() as conn:
         conn.execute(
-            "UPDATE sessions SET is_active = 0 WHERE token = ?", (token,)
+            "UPDATE sessions SET is_active = FALSE WHERE token = ?", (token,)
         )
 
 
@@ -355,7 +355,7 @@ def check_account_lockout(username: str) -> Optional[str]:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT failed_login_attempts, locked_until
-            FROM users WHERE (username = ? OR email = ?) AND is_active = 1
+            FROM users WHERE (username = ? OR email = ?) AND is_active = TRUE
         """, (username, username))
         row = cursor.fetchone()
 
@@ -378,7 +378,7 @@ def record_failed_login(username: str):
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, failed_login_attempts FROM users
-            WHERE (username = ? OR email = ?) AND is_active = 1
+            WHERE (username = ? OR email = ?) AND is_active = TRUE
         """, (username, username))
         row = cursor.fetchone()
 
@@ -449,7 +449,7 @@ def get_user_sessions(user_id: int):
             SELECT id, ip_address, user_agent, device_type,
                    created_at, last_activity, expires_at
             FROM sessions
-            WHERE user_id = ? AND is_active = 1
+            WHERE user_id = ? AND is_active = TRUE
             ORDER BY last_activity DESC
         """, (user_id,))
         return [dict(row) for row in cursor.fetchall()]
@@ -460,7 +460,7 @@ def revoke_session(session_id: int, user_id: int, reason: str = "user_revoke"):
     with get_db() as conn:
         conn.execute("""
             UPDATE sessions
-            SET is_active = 0, logout_at = ?, logout_reason = ?
+            SET is_active = FALSE, logout_at = ?, logout_reason = ?
             WHERE id = ? AND user_id = ?
         """, (datetime.utcnow().isoformat(), reason, session_id, user_id))
 
@@ -471,14 +471,14 @@ def revoke_all_sessions(user_id: int, except_token: str = None, reason: str = "u
         if except_token:
             conn.execute("""
                 UPDATE sessions
-                SET is_active = 0, logout_at = ?, logout_reason = ?
-                WHERE user_id = ? AND is_active = 1 AND token != ?
+                SET is_active = FALSE, logout_at = ?, logout_reason = ?
+                WHERE user_id = ? AND is_active = TRUE AND token != ?
             """, (datetime.utcnow().isoformat(), reason, user_id, except_token))
         else:
             conn.execute("""
                 UPDATE sessions
-                SET is_active = 0, logout_at = ?, logout_reason = ?
-                WHERE user_id = ? AND is_active = 1
+                SET is_active = FALSE, logout_at = ?, logout_reason = ?
+                WHERE user_id = ? AND is_active = TRUE
             """, (datetime.utcnow().isoformat(), reason, user_id))
 
 
@@ -486,7 +486,7 @@ def update_session_activity(token: str):
     """Update last_activity for a session."""
     with get_db() as conn:
         conn.execute(
-            "UPDATE sessions SET last_activity = ? WHERE token = ? AND is_active = 1",
+            "UPDATE sessions SET last_activity = ? WHERE token = ? AND is_active = TRUE",
             (datetime.utcnow().isoformat(), token),
         )
 

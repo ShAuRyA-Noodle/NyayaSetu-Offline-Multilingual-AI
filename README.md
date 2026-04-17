@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/NyayaSetu-Bridge%20to%20Justice-FF9933?style=for-the-badge&labelColor=138808" alt="NyayaSetu" />
+  <img src="https://img.shields.io/badge/NyayaSetu-AI%20Governance-0D92F4?style=for-the-badge&labelColor=060B18" alt="NyayaSetu" />
 </p>
 
 <h1 align="center">NyayaSetu (न्यायसेतु)</h1>
@@ -11,11 +11,11 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Status-Production%20Ready-success?style=flat-square" />
-  <img src="https://img.shields.io/badge/Languages-12%20Indian-blue?style=flat-square" />
-  <img src="https://img.shields.io/badge/Offline-First-orange?style=flat-square" />
-  <img src="https://img.shields.io/badge/LLM-Qwen%202.5%2014B-blueviolet?style=flat-square" />
+  <img src="https://img.shields.io/badge/Languages-12%20Indian-0D92F4?style=flat-square" />
+  <img src="https://img.shields.io/badge/LLM-Groq%20%2B%20Ollama-blueviolet?style=flat-square" />
+  <img src="https://img.shields.io/badge/Voice-Sarvam%20AI-77CDFF?style=flat-square" />
   <img src="https://img.shields.io/badge/Endpoints-80%2B-informational?style=flat-square" />
-  <img src="https://img.shields.io/badge/Voice-Sarvam%20AI-red?style=flat-square" />
+  <img src="https://img.shields.io/badge/RAG-FAISS%20%2B%20Embeddings-orange?style=flat-square" />
 </p>
 
 ---
@@ -92,14 +92,14 @@ NyayaSetu is an offline-capable, voice-native, multilingual AI platform that con
 | Component | Technology | Details |
 |-----------|-----------|---------|
 | Framework | FastAPI + Uvicorn | 80+ endpoints across 7 routers |
-| LLM | Qwen 2.5 14B (Q4_0) | Local via Ollama, temp 0.1, 90s timeout, 3 retries |
+| LLM | Groq (llama-3.3-70b) / Ollama (Qwen 2.5 14B) | Cloud-first with local fallback, auto-switches via GROQ_API_KEY env var |
 | Embeddings | paraphrase-multilingual-mpnet-base-v2 | 768-dim, 50+ languages, L2-normalized, ~420MB |
 | Vector Store | FAISS IndexFlatIP | Exact cosine similarity, persisted to disk |
 | Database | SQLite (WAL mode) | 20+ tables, 4 versioned migrations, foreign keys |
 | Auth | JWT (HS256) + bcrypt | 24h tokens, DB-backed sessions, audit logging |
 | ASR | Sarvam AI saarika v2.5 / faster-whisper | Online + offline dual-mode |
 | TTS | Sarvam AI bulbul v3 / pyttsx3 | 22050Hz WAV, priya/shubh voices |
-| Translation | Sarvam AI mayura v1 / Ollama sarvam-m-tools | Formal + colloquial modes |
+| Translation | Sarvam AI mayura v1 / Groq LLM fallback | Formal + colloquial modes |
 
 ### Frontend
 
@@ -108,9 +108,9 @@ NyayaSetu is an offline-capable, voice-native, multilingual AI platform that con
 | Framework | React 18 + TypeScript | HashRouter for Electron compatibility |
 | Build | Vite 5 | Hot module replacement |
 | Desktop | Electron 28 | Native window, 1400x900, context isolation |
-| Styling | Tailwind CSS | Custom Indian earth-tone palette (8 color families) |
-| Animation | Framer Motion + GSAP + Lenis | Cultural animations (chakra-spin, float, grain) |
-| 3D | Three.js / react-three-fiber | Decorative 3D elements |
+| Styling | Tailwind CSS | Deep sea-navy glass morphism design system (blue/cyan/coral palette) |
+| Animation | Framer Motion + GSAP + Lenis | Apple-grade smooth scroll, page transitions, scroll reveals |
+| 3D | Three.js / react-three-fiber | Ambient aurora orbs, gradient mesh backgrounds |
 | Charts | Recharts | AreaChart, BarChart, LineChart for analytics |
 | i18n | react-i18next | English + Hindi |
 | HTTP | Axios | Auth interceptor, 401 auto-redirect |

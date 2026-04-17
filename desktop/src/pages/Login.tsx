@@ -1,17 +1,19 @@
-import React, { useState, useMemo, useEffect, useCallback, Suspense } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { User, Lock, Mail, Phone, MapPin, LogIn, UserPlus, Eye, EyeOff, Shield, KeyRound } from 'lucide-react';
+import { User, Lock, Mail, Phone, MapPin, Eye, EyeOff, Shield, KeyRound, ArrowRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import apiService from '../services/api';
 import AshokaChakra from '../components/decorative/AshokaChakra';
-import WarliIllustration from '../components/decorative/WarliIllustration';
-import RangoliPattern from '../components/decorative/RangoliPattern';
-import GlobeParticles from '../components/decorative/GlobeParticles';
 import ThemedSpinner from '../components/ui/ThemedSpinner';
-import TextReveal from '../components/ui/TextReveal';
 
-const LoginScene = React.lazy(() => import('../components/three/LoginScene'));
+// Defined OUTSIDE component to avoid remount on every keystroke
+const InputField = ({ icon: Icon, ...props }: any) => (
+  <div className="relative group">
+    <Icon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-slate-400/50 dark:text-slate-400 transition-colors group-focus-within:text-slate-400 dark:group-focus-within:text-slate-400" />
+    <input {...props} className="w-full pl-11 pr-4 py-3 village-input text-sm" />
+  </div>
+);
 
 const Login: React.FC = () => {
   const { login } = useAuth();
@@ -20,7 +22,6 @@ const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [use3D, setUse3D] = useState(false);
 
   const [loginData, setLoginData] = useState({ username: '', password: '' });
   const [registerData, setRegisterData] = useState({
@@ -81,8 +82,7 @@ const Login: React.FC = () => {
     setLoading(true);
     setError('');
     if (selectedRole === 'officer') {
-      if (!officerCode) { setError(t('login.codeInvalid')); setLoading(false); return; }
-      if (!codeValidation?.valid) { setError(t('login.codeInvalid')); setLoading(false); return; }
+      if (!officerCode || !codeValidation?.valid) { setError(t('login.codeInvalid')); setLoading(false); return; }
     }
     try {
       await apiService.register({
@@ -97,303 +97,323 @@ const Login: React.FC = () => {
     } finally { setLoading(false); }
   };
 
-  const inputClass = "w-full pl-10 pr-4 py-3 village-input";
-  const inputClassRight = "w-full pl-10 pr-12 py-3 village-input";
-
   return (
-    <div className="min-h-screen relative overflow-x-hidden overflow-y-auto bg-kora dark:bg-night-bg" data-lenis-prevent>
-      {/* Background: Either 3D scene or globe particles */}
-      {use3D ? (
-        <Suspense fallback={null}>
-          <LoginScene />
-        </Suspense>
-      ) : (
-        <>
-          {/* Village gradient background */}
-          <div className="absolute inset-0 bg-gradient-village dark:bg-gradient-night" />
-          {/* Globe particle effect */}
-          <GlobeParticles className="z-[1]" />
-          {/* Subtle kolam pattern */}
-          <div className="absolute inset-0 z-[2]">
-            <RangoliPattern opacity={0.03} />
-          </div>
-          {/* Grain */}
-          <div className="absolute inset-0 z-[3] grain-overlay" />
-        </>
-      )}
+    <div className="min-h-screen relative overflow-hidden bg-[#060B18] flex" data-lenis-prevent>
 
-      {/* 3D toggle */}
-      <button
-        onClick={() => setUse3D(!use3D)}
-        className="absolute top-4 right-4 z-20 px-3 py-1.5 text-xs font-medium rounded-lg bg-kora-100/80 dark:bg-night-card/80 border border-mitti-200/30 dark:border-night-border text-mitti-500 dark:text-mitti-400 hover:bg-mitti-100/60 transition-colors backdrop-blur-sm"
-      >
-        {use3D ? 'Village' : '3D'} View
-      </button>
+      {/* ─── Animated background mesh ─── */}
+      <div className="absolute inset-0 overflow-hidden">
+        {/* Ambient orbs */}
+        <div className="aurora-orb w-[600px] h-[600px] bg-[#0D92F4]/15 top-[-10%] left-[-10%]" style={{ animationDelay: '0s' }} />
+        <div className="aurora-orb w-[500px] h-[500px] bg-[#F95454]/10 bottom-[-15%] right-[-5%]" style={{ animationDelay: '-7s' }} />
+        <div className="aurora-orb w-[400px] h-[400px] bg-[#77CDFF]/8 top-[40%] left-[60%]" style={{ animationDelay: '-14s' }} />
+        {/* Grid pattern */}
+        <div className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: `linear-gradient(rgba(13,146,244,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(13,146,244,0.3) 1px, transparent 1px)`,
+            backgroundSize: '60px 60px',
+          }}
+        />
+        {/* Grain */}
+        <div className="absolute inset-0 grain-overlay" />
+      </div>
 
-      {/* Content — Two column on desktop */}
-      <div className="relative z-10 min-h-screen flex items-center justify-center p-4 lg:p-8">
-        <div className="w-full max-w-5xl flex flex-col lg:flex-row items-center gap-8 lg:gap-16">
-
-          {/* Left Hero (hidden on mobile) */}
+      {/* ─── Left Hero ─── */}
+      <div className="hidden lg:flex flex-1 relative items-center justify-center p-12">
+        <motion.div
+          className="relative z-10 max-w-lg"
+          initial={{ opacity: 0, x: -30 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.8, ease: [0.25, 0.1, 0.25, 1] }}
+        >
+          {/* Ashoka Chakra */}
           <motion.div
-            className="hidden lg:flex flex-col flex-1 max-w-lg"
-            initial={{ opacity: 0, x: -40 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.7, ease: [0.25, 0.1, 0.25, 1] }}
+            className="mb-8"
+            initial={{ opacity: 0, rotate: -180 }}
+            animate={{ opacity: 1, rotate: 0 }}
+            transition={{ duration: 1.2, ease: [0.25, 0.1, 0.25, 1] }}
           >
-            <div className="mb-6">
-              <AshokaChakra size={48} spinning />
-            </div>
-
-            <h1 className="font-display text-hero-sm xl:text-hero text-mitti-900 dark:text-kora-100 mb-3">
-              NyayaSetu
-            </h1>
-
-            <p className="font-devanagari text-3xl text-mitti-500 dark:text-mitti-300 mb-4">
-              न्यायसेतु
-            </p>
-
-            <TextReveal
-              as="p"
-              className="text-lg text-mitti-600/80 dark:text-mitti-400/80 font-light leading-relaxed mb-8"
-              splitBy="word"
-              delay={0.3}
-              stagger={0.04}
-            >
-              Bridging the gap between rural citizens and governance with AI-powered intelligence
-            </TextReveal>
-
-            <div className="kolam-divider w-32 mb-8" />
-
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.15 }}
-              transition={{ delay: 0.8 }}
-            >
-              <WarliIllustration variant="panchayat" size={280} />
-            </motion.div>
+            <AshokaChakra size={56} spinning />
           </motion.div>
 
-          {/* Right Form */}
-          <motion.div
-            className="w-full max-w-md lg:flex-shrink-0"
-            initial={{ opacity: 0, y: 30 }}
+          {/* Title */}
+          <motion.h1
+            className="text-6xl xl:text-7xl font-display font-bold tracking-tight mb-2"
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
+            transition={{ duration: 0.7, delay: 0.2 }}
           >
-            {/* Mobile logo */}
-            <motion.div
-              className="text-center mb-6 lg:hidden"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5, delay: 0.1 }}
-            >
-              <div className="inline-block mb-3">
-                <AshokaChakra size={48} spinning />
-              </div>
-              <h1 className="text-2xl font-display font-bold text-gradient-mitti">
-                {t('common.appName')}
-              </h1>
-              <p className="font-devanagari text-lg text-mitti-500 dark:text-mitti-300 mt-1">न्यायसेतु</p>
-              <div className="kolam-divider w-24 mx-auto mt-3" />
-            </motion.div>
+            <span className="text-gradient-gold">Nyaya</span>
+            <span className="text-kora-100">Setu</span>
+          </motion.h1>
 
-            {/* Form Card */}
-            <div className="village-card border border-mitti-200/40 dark:border-night-border/60 shadow-elevated grain-overlay p-5 sm:p-7 md:p-8">
-              {/* Tabs */}
-              <div className="flex mb-6 village-card-subtle p-1 rounded-xl relative z-10">
-                <button
-                  onClick={() => { setIsLogin(true); setError(''); }}
-                  className={`flex-1 py-2.5 rounded-lg font-semibold text-sm transition-all ${
-                    isLogin
-                      ? 'bg-mitti-500 text-white shadow-mitti'
-                      : 'text-mitti-600 dark:text-mitti-400 hover:text-mitti-800'
-                  }`}
-                >{t('login.loginTab')}</button>
-                <button
-                  onClick={() => { setIsLogin(false); setError(''); }}
-                  className={`flex-1 py-2.5 rounded-lg font-semibold text-sm transition-all ${
-                    !isLogin
-                      ? 'bg-mitti-500 text-white shadow-mitti'
-                      : 'text-mitti-600 dark:text-mitti-400 hover:text-mitti-800'
-                  }`}
-                >{t('login.registerTab')}</button>
-              </div>
+          {/* Devanagari */}
+          <motion.p
+            className="font-devanagari text-2xl text-slate-400/60 mb-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.4 }}
+          >
+            न्यायसेतु
+          </motion.p>
 
-              <div style={{
-                display: 'grid',
-                gridTemplateRows: error ? '1fr' : '0fr',
-                transition: 'grid-template-rows 0.22s cubic-bezier(0.25, 1, 0.5, 1)',
-              }}>
-                <div className="overflow-hidden">
-                  <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl relative z-10"
-                    style={{ opacity: error ? 1 : 0, transition: 'opacity 0.15s ease' }}>
-                    <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-                  </div>
+          {/* Divider */}
+          <motion.div
+            className="w-16 h-[2px] bg-gradient-to-r from-mitti-500 to-transparent mb-6"
+            initial={{ scaleX: 0 }}
+            animate={{ scaleX: 1 }}
+            transition={{ duration: 0.6, delay: 0.5 }}
+            style={{ transformOrigin: 'left' }}
+          />
+
+          {/* Subtitle */}
+          <motion.p
+            className="text-lg text-kora-300/50 font-light leading-relaxed max-w-sm"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.6 }}
+          >
+            AI-powered citizen governance platform bridging rural India with intelligent public services
+          </motion.p>
+
+          {/* Feature pills */}
+          <motion.div
+            className="flex flex-wrap gap-2 mt-8"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.8 }}
+          >
+            {['12 Languages', 'Voice Interface', 'AI-Powered', 'Offline Ready'].map((tag, i) => (
+              <span key={tag} className="px-3 py-1.5 text-xs font-medium rounded-full border border-[#0D92F4]/15 text-[#77CDFF]/50 bg-[#0D92F4]/5"
+                style={{ animationDelay: `${0.9 + i * 0.1}s` }}>
+                {tag}
+              </span>
+            ))}
+          </motion.div>
+        </motion.div>
+      </div>
+
+      {/* ─── Right Form Panel ─── */}
+      <div className="w-full lg:w-[480px] xl:w-[520px] flex-shrink-0 relative z-10 flex items-center justify-center px-5 py-8 sm:p-6 lg:p-10">
+
+        {/* Glass panel background */}
+        <div className="absolute inset-0 glass-surface-strong border-l border-white/[0.04]" />
+
+        <motion.div
+          className="relative z-10 w-full max-w-sm"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.15 }}
+        >
+          {/* Mobile branding */}
+          <div className="text-center mb-8 lg:hidden">
+            <div className="inline-block mb-3">
+              <AshokaChakra size={44} spinning />
+            </div>
+            <h1 className="text-2xl font-display font-bold text-gradient-gold">NyayaSetu</h1>
+            <p className="font-devanagari text-base text-slate-400/50 mt-1">न्यायसेतु</p>
+          </div>
+
+          {/* Welcome text */}
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-kora-100 mb-1">
+              {isLogin ? t('login.loginTab') : t('login.registerTab')}
+            </h2>
+            <p className="text-sm text-slate-400/60">
+              {isLogin ? 'Welcome back to NyayaSetu' : 'Create your account to get started'}
+            </p>
+          </div>
+
+          {/* Tab switcher */}
+          <div className="flex mb-6 rounded-xl p-1 bg-white/[0.04] border border-white/[0.06]">
+            {[{ key: true, label: t('login.loginTab') }, { key: false, label: t('login.registerTab') }].map((tab) => (
+              <button key={String(tab.key)}
+                onClick={() => { setIsLogin(tab.key); setError(''); }}
+                className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                  isLogin === tab.key
+                    ? 'bg-[#0D92F4] text-white shadow-lg shadow-[#0D92F4]/20'
+                    : 'text-slate-400/60 hover:text-slate-400/80'
+                }`}
+              >{tab.label}</button>
+            ))}
+          </div>
+
+          {/* Error */}
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mb-4 overflow-hidden"
+              >
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                  <p className="text-sm text-red-400">{error}</p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* ─── Login Form ─── */}
+          {isLogin ? (
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-400/60 mb-2 uppercase tracking-wider">{t('login.username')}</label>
+                <InputField icon={User} type="text" value={loginData.username}
+                  onChange={(e: any) => setLoginData({ ...loginData, username: e.target.value })}
+                  placeholder={t('login.username')} required />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400/60 mb-2 uppercase tracking-wider">{t('login.password')}</label>
+                <div className="relative group">
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-slate-400/50 dark:text-slate-400 transition-colors group-focus-within:text-slate-400 dark:group-focus-within:text-slate-400" />
+                  <input type={showPassword ? 'text' : 'password'} value={loginData.password}
+                    onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
+                    className="w-full pl-11 pr-11 py-3 village-input text-sm" placeholder={t('login.password')} required />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400/50 hover:text-slate-400 transition-colors">
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <motion.button type="submit" disabled={loading}
+                className="w-full btn-mitti flex items-center justify-center gap-2 mt-6 disabled:opacity-50"
+                whileTap={{ scale: 0.98 }}>
+                {loading ? <ThemedSpinner size="sm" /> : <>
+                  {t('login.loginButton')}
+                  <ArrowRight className="w-4 h-4" />
+                </>}
+              </motion.button>
+            </form>
+          ) : (
+            /* ─── Register Form ─── */
+            <form onSubmit={handleRegister} className="space-y-3.5">
+              {/* Role selector */}
+              <div>
+                <label className="block text-xs font-medium text-slate-400/60 mb-2 uppercase tracking-wider">{t('login.iAmA')}</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => { setSelectedRole('citizen'); setOfficerCode(''); setCodeValidation(null); }}
+                    className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 border ${
+                      selectedRole === 'citizen'
+                        ? 'border-[#0D92F4]/30 bg-[#0D92F4]/10 text-[#77CDFF]'
+                        : 'border-white/[0.06] text-slate-400/50 hover:border-white/[0.1]'
+                    }`}>
+                    <User className="w-4 h-4" />{t('login.citizen')}
+                  </button>
+                  <button type="button" onClick={() => setSelectedRole('officer')}
+                    className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 border ${
+                      selectedRole === 'officer'
+                        ? 'border-neel-500/50 bg-[#77CDFF]/8 text-neel-400'
+                        : 'border-white/[0.06] text-slate-400/50 hover:border-white/[0.1]'
+                    }`}>
+                    <Shield className="w-4 h-4" />{t('login.officer')}
+                  </button>
                 </div>
               </div>
 
-              <div className="relative z-10">
-                {isLogin ? (
-                  <form onSubmit={handleLogin} className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-mitti-700 dark:text-mitti-300 mb-2">{t('login.username')}</label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 text-mitti-400 w-5 h-5" />
-                        <input type="text" value={loginData.username} onChange={(e) => setLoginData({ ...loginData, username: e.target.value })}
-                          className={inputClass} placeholder={t('login.username')} required />
-                      </div>
+              {/* Officer code */}
+              <AnimatePresence>
+                {selectedRole === 'officer' && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <label className="block text-xs font-medium text-slate-400/60 mb-2 uppercase tracking-wider">{t('login.officerCode')} *</label>
+                    <div className="relative">
+                      <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-neel-400/70" />
+                      <input type="text" value={officerCode} onChange={(e) => setOfficerCode(e.target.value.toUpperCase())}
+                        className={`w-full pl-11 pr-4 py-3 village-input text-sm font-mono tracking-widest ${
+                          codeValidation?.valid ? '!border-india-green-500/50' : codeValidation?.valid === false ? '!border-red-500/50' : ''
+                        }`}
+                        placeholder={t('login.enterCode')} maxLength={8} />
+                      {validatingCode && <div className="absolute right-3 top-1/2 -translate-y-1/2"><ThemedSpinner size="sm" /></div>}
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-mitti-700 dark:text-mitti-300 mb-2">{t('login.password')}</label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-mitti-400 w-5 h-5" />
-                        <input type={showPassword ? 'text' : 'password'} value={loginData.password} onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
-                          className={inputClassRight} placeholder={t('login.password')} required />
-                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-mitti-400 hover:text-mitti-600 transition-colors">
-                          {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                        </button>
+                    {codeValidation && (
+                      <div className={`mt-2 p-2.5 rounded-lg text-xs ${
+                        codeValidation.valid
+                          ? 'bg-india-green-500/10 border border-india-green-500/20 text-india-green-400'
+                          : 'bg-red-500/10 border border-red-500/20 text-red-400'
+                      }`}>
+                        {codeValidation.valid
+                          ? <span>Dept: <strong>{codeValidation.department}</strong>{codeValidation.designation && ` · ${codeValidation.designation}`}</span>
+                          : <span>{codeValidation.message || t('login.codeInvalid')}</span>}
                       </div>
-                    </div>
-                    <motion.button
-                      type="submit" disabled={loading}
-                      className="w-full btn-mitti flex items-center justify-center disabled:opacity-50"
-                      whileHover={{ scale: loading ? 1 : 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      {loading ? <ThemedSpinner size="sm" /> : <><LogIn className="w-5 h-5 mr-2" />{t('login.loginButton')}</>}
-                    </motion.button>
-                  </form>
-                ) : (
-                  <form onSubmit={handleRegister} className="space-y-4">
-                    {/* Role Selector */}
-                    <div>
-                      <label className="block text-sm font-medium text-mitti-700 dark:text-mitti-300 mb-2">{t('login.iAmA')}</label>
-                      <div className="grid grid-cols-2 gap-3">
-                        <motion.button type="button" onClick={() => { setSelectedRole('citizen'); setOfficerCode(''); setCodeValidation(null); }}
-                          className={`flex items-center justify-center space-x-2 py-3 rounded-xl border-2 font-semibold transition-all ${
-                            selectedRole === 'citizen'
-                              ? 'border-mitti-500 bg-mitti-500/10 text-mitti-700 dark:text-mitti-400'
-                              : 'border-mitti-200/30 dark:border-night-border text-mitti-500 dark:text-mitti-400 hover:border-mitti-300'
-                          }`}
-                          whileTap={{ scale: 0.97 }}>
-                          <User className="w-5 h-5" /><span>{t('login.citizen')}</span>
-                        </motion.button>
-                        <motion.button type="button" onClick={() => setSelectedRole('officer')}
-                          className={`flex items-center justify-center space-x-2 py-3 rounded-xl border-2 font-semibold transition-all ${
-                            selectedRole === 'officer'
-                              ? 'border-neel-500 bg-neel-500/10 text-neel-600 dark:text-neel-400'
-                              : 'border-mitti-200/30 dark:border-night-border text-mitti-500 dark:text-mitti-400 hover:border-neel-300'
-                          }`}
-                          whileTap={{ scale: 0.97 }}>
-                          <Shield className="w-5 h-5" /><span>{t('login.officer')}</span>
-                        </motion.button>
-                      </div>
-                    </div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-                    {/* Officer Code */}
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateRows: selectedRole === 'officer' ? '1fr' : '0fr',
-                      transition: 'grid-template-rows 0.25s cubic-bezier(0.25, 1, 0.5, 1)',
-                    }}>
-                      <div className="overflow-hidden">
-                      <div style={{ opacity: selectedRole === 'officer' ? 1 : 0, transition: 'opacity 0.2s ease' }}>
-                        <label className="block text-sm font-medium text-mitti-700 dark:text-mitti-300 mb-2">{t('login.officerCode')} *</label>
-                        <div className="relative">
-                          <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 text-neel-400 w-5 h-5" />
-                          <input type="text" value={officerCode} onChange={(e) => setOfficerCode(e.target.value.toUpperCase())}
-                            className={`${inputClass} font-mono tracking-widest ${
-                              codeValidation?.valid ? '!border-india-green-500 !ring-india-green-500/50' : codeValidation?.valid === false ? '!border-red-500' : ''
-                            }`}
-                            placeholder={t('login.enterCode')} maxLength={8} />
-                          {validatingCode && <div className="absolute right-3 top-1/2 -translate-y-1/2"><ThemedSpinner size="sm" /></div>}
-                        </div>
-                        {codeValidation && (
-                          <div className={`mt-2 p-2.5 rounded-xl text-sm ${
-                            codeValidation.valid
-                              ? 'bg-india-green-500/10 border border-india-green-500/20 text-india-green-700 dark:text-india-green-400'
-                              : 'bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400'
-                          }`}>
-                            {codeValidation.valid
-                              ? <span>Department: <strong>{codeValidation.department}</strong>{codeValidation.designation && ` | ${codeValidation.designation}`}</span>
-                              : <span>{codeValidation.message || t('login.codeInvalid')}</span>}
-                          </div>
-                        )}
-                      </div>
-                      </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400/60 mb-2 uppercase tracking-wider">{t('login.username')} *</label>
+                <InputField icon={User} type="text" value={registerData.username}
+                  onChange={(e: any) => setRegisterData({ ...registerData, username: e.target.value })}
+                  placeholder={t('login.username')} required minLength={3} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400/60 mb-2 uppercase tracking-wider">{t('login.email')} *</label>
+                <InputField icon={Mail} type="email" value={registerData.email}
+                  onChange={(e: any) => setRegisterData({ ...registerData, email: e.target.value })}
+                  placeholder="email@example.com" required />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400/60 mb-2 uppercase tracking-wider">{t('login.password')} *</label>
+                <div className="relative group">
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-slate-400/50 dark:text-slate-400 transition-colors group-focus-within:text-slate-400 dark:group-focus-within:text-slate-400" />
+                  <input type={showPassword ? 'text' : 'password'} value={registerData.password}
+                    onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
+                    className="w-full pl-11 pr-11 py-3 village-input text-sm" placeholder="Min 8 characters" required minLength={8} />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400/50 hover:text-slate-400 transition-colors">
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {registerData.password && (
+                  <div className="mt-2">
+                    <div className="flex gap-1 mb-1">
+                      {[1, 2, 3, 4, 5].map((level) => (
+                        <div key={level} className={`h-1 flex-1 rounded-full transition-all duration-300 ${
+                          level <= passwordStrength.score ? passwordStrength.color : 'bg-white/[0.06]'
+                        }`} />
+                      ))}
                     </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-mitti-700 dark:text-mitti-300 mb-2">{t('login.username')} *</label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 text-mitti-400 w-5 h-5" />
-                        <input type="text" value={registerData.username} onChange={(e) => setRegisterData({ ...registerData, username: e.target.value })}
-                          className={inputClass} placeholder={t('login.username')} required minLength={3} />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-mitti-700 dark:text-mitti-300 mb-2">{t('login.email')} *</label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-mitti-400 w-5 h-5" />
-                        <input type="email" value={registerData.email} onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
-                          className={inputClass} placeholder="email@example.com" required />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-mitti-700 dark:text-mitti-300 mb-2">{t('login.password')} *</label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-mitti-400 w-5 h-5" />
-                        <input type={showPassword ? 'text' : 'password'} value={registerData.password} onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
-                          className={inputClassRight} placeholder="Min 8 chars" required minLength={8} />
-                        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-mitti-400 hover:text-mitti-600 transition-colors">
-                          {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                        </button>
-                      </div>
-                      {registerData.password && (
-                        <div className="mt-2">
-                          <div className="flex gap-1 mb-1">
-                            {[1, 2, 3, 4, 5].map((level) => (
-                              <div key={level} className={`h-1.5 flex-1 rounded-full transition-colors ${level <= passwordStrength.score ? passwordStrength.color : 'bg-mitti-200 dark:bg-night-border'}`} />
-                            ))}
-                          </div>
-                          <p className="text-xs text-mitti-500">{passwordStrength.label}</p>
-                        </div>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-sm font-medium text-mitti-700 dark:text-mitti-300 mb-2">{t('login.location')}</label>
-                        <div className="relative">
-                          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-mitti-400 w-4 h-4" />
-                          <input type="text" value={registerData.location} onChange={(e) => setRegisterData({ ...registerData, location: e.target.value })}
-                            className={inputClass} placeholder="City, State" />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-mitti-700 dark:text-mitti-300 mb-2">Phone</label>
-                        <div className="relative">
-                          <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-mitti-400 w-4 h-4" />
-                          <input type="tel" value={registerData.phone} onChange={(e) => setRegisterData({ ...registerData, phone: e.target.value })}
-                            className={inputClass} placeholder="+91-XXXXX" />
-                        </div>
-                      </div>
-                    </div>
-                    <motion.button
-                      type="submit" disabled={loading || (selectedRole === 'officer' && !codeValidation?.valid)}
-                      className={`w-full flex items-center justify-center disabled:opacity-50 ${selectedRole === 'officer' ? 'btn-neel' : 'btn-mitti'}`}
-                      whileHover={{ scale: loading ? 1 : 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      {loading ? <ThemedSpinner size="sm" /> : <><UserPlus className="w-5 h-5 mr-2" />{t('login.createAccount')}</>}
-                    </motion.button>
-                  </form>
+                    <p className="text-[11px] text-slate-400/50">{passwordStrength.label}</p>
+                  </div>
                 )}
               </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-slate-400/60 mb-2 uppercase tracking-wider">{t('login.location')}</label>
+                  <InputField icon={MapPin} type="text" value={registerData.location}
+                    onChange={(e: any) => setRegisterData({ ...registerData, location: e.target.value })}
+                    placeholder="City, State" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400/60 mb-2 uppercase tracking-wider">Phone</label>
+                  <InputField icon={Phone} type="tel" value={registerData.phone}
+                    onChange={(e: any) => setRegisterData({ ...registerData, phone: e.target.value })}
+                    placeholder="+91-XXXXX" />
+                </div>
+              </div>
+              <motion.button type="submit"
+                disabled={loading || (selectedRole === 'officer' && !codeValidation?.valid)}
+                className={`w-full flex items-center justify-center gap-2 mt-4 disabled:opacity-50 ${selectedRole === 'officer' ? 'btn-neel' : 'btn-mitti'}`}
+                whileTap={{ scale: 0.98 }}>
+                {loading ? <ThemedSpinner size="sm" /> : <>
+                  {t('login.createAccount')}
+                  <ArrowRight className="w-4 h-4" />
+                </>}
+              </motion.button>
+            </form>
+          )}
 
-            </div>
-          </motion.div>
-        </div>
+          {/* Footer */}
+          <div className="mt-8 text-center">
+            <p className="text-[11px] text-slate-500/30">
+              NyayaSetu v2.0 · AI-Powered Governance
+            </p>
+          </div>
+        </motion.div>
       </div>
     </div>
   );

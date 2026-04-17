@@ -14,10 +14,22 @@ env/
 ENV/
 venv.bak/
 
-# Environment Variables
+# Environment Variables - NEVER COMMIT
 .env
 .env.local
 .env.*.local
+.env.production
+.env.development
+!.env.example
+
+# Secrets and credentials
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials.json
+service-account*.json
 
 # =========================
 # Data & Model Artifacts
@@ -29,12 +41,31 @@ translation_models/
 # Database files (keep seed files, ignore runtime DBs)
 backend/data/*.db
 backend/data/cache/*.db
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+data/cache/
+data/audio/
 !backend/data/schemes_seed.json
+
+# Database dumps (migration artifacts - never commit)
+*.sql.gz
+*.dump
+*.backup
+data/sqlite_export.sql
+data/postgres_import.sql
 
 # FAISS indexes and pickles (regenerated from seed data)
 backend/data/*.index
 backend/data/*.pkl
 backend/data/*.bin
+data/*.index
+data/*.pkl
+data/*.bin
+
+# Docker
+.dockerignore.local
 
 # =========================
 # OS Files

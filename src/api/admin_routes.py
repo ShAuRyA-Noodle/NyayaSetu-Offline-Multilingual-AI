@@ -119,7 +119,7 @@ async def disable_user(user_id: int, current_user: dict = Depends(require_role("
     """Disable a user account."""
     try:
         with get_db() as conn:
-            conn.execute("UPDATE users SET is_active = 0 WHERE id = ?", (user_id,))
+            conn.execute("UPDATE users SET is_active = FALSE WHERE id = ?", (user_id,))
         return {"success": True, "user_id": user_id, "is_active": False}
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -183,7 +183,7 @@ async def analytics_overview(current_user: dict = Depends(require_role("admin"))
         with get_db() as conn:
             cursor = conn.cursor()
 
-            cursor.execute("SELECT COUNT(*) as cnt FROM users WHERE is_active = 1")
+            cursor.execute("SELECT COUNT(*) as cnt FROM users WHERE is_active = TRUE")
             total_users = cursor.fetchone()["cnt"]
 
             cursor.execute("SELECT role, COUNT(*) as cnt FROM users GROUP BY role")
@@ -229,23 +229,28 @@ async def analytics_trends(
 ):
     """Historical trend data."""
     try:
+        # Compute cutoff in Python for dialect-agnostic queries.
+        # SQLite's DATE('now', '-N days') doesn't exist in Postgres.
+        from datetime import datetime, timedelta, timezone
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
         with get_db() as conn:
             cursor = conn.cursor()
 
             cursor.execute("""
                 SELECT DATE(submitted_at) as date, COUNT(*) as grievances
                 FROM grievances
-                WHERE submitted_at >= DATE('now', ? || ' days')
+                WHERE submitted_at >= ?
                 GROUP BY DATE(submitted_at) ORDER BY date
-            """, (f"-{days}",))
+            """, (cutoff,))
             grievance_trend = [dict(r) for r in cursor.fetchall()]
 
             cursor.execute("""
                 SELECT DATE(created_at) as date, COUNT(*) as users
                 FROM users
-                WHERE created_at >= DATE('now', ? || ' days')
+                WHERE created_at >= ?
                 GROUP BY DATE(created_at) ORDER BY date
-            """, (f"-{days}",))
+            """, (cutoff,))
             user_trend = [dict(r) for r in cursor.fetchall()]
 
         return {

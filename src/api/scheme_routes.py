@@ -45,7 +45,7 @@ def can_user_manage_scheme(user_id: int, scheme_id: str, conn) -> bool:
         return True
     cursor.execute("""
         SELECT COUNT(*) FROM scheme_assignments
-        WHERE scheme_id = ? AND officer_id = ? AND is_active = 1
+        WHERE scheme_id = ? AND officer_id = ? AND is_active = TRUE
     """, (scheme_id, user_id))
     return cursor.fetchone()[0] > 0
 
@@ -286,69 +286,41 @@ RAW DOCUMENT:
 JSON OUTPUT:"""
 
     try:
-        import requests as _requests
+        from src.generation.llm_client import create_client
 
         input_chars = len(raw_text)
         needed_tokens = min(max(int(input_chars / 2), 4096), 16384)
         logger.info(f"Formatting doc: {input_chars} chars, requesting {needed_tokens} max_tokens")
 
-        # Explicit JSON schema — Ollama's structured output mode enforces this shape.
-        json_schema = {
-            "type": "object",
-            "properties": {
-                "title": {"type": "string"},
-                "sections": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "heading": {"type": "string"},
-                            "blocks": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "type": {"type": "string", "enum": ["paragraph", "bullets", "numbered"]},
-                                        "text": {"type": "string"},
-                                        "items": {"type": "array", "items": {"type": "string"}},
-                                    },
-                                    "required": ["type"],
-                                },
-                            },
-                        },
-                        "required": ["heading", "blocks"],
-                    },
-                },
-            },
-            "required": ["title", "sections"],
-        }
-
-        payload = {
-            "model": "qwen2.5:14b-instruct-q4_0",
-            "prompt": user_prompt,
-            "system": system_prompt,
-            "stream": False,
-            "format": json_schema,  # Structured output — enforces exact schema
-            "options": {
-                "temperature": 0.1,
-                "num_predict": needed_tokens,
-                "top_p": 0.9,
-            },
-        }
-        response = _requests.post(
-            "http://localhost:11434/api/generate",
-            json=payload,
-            timeout=300,
+        client = create_client()
+        result = client.generate(
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+            temperature=0.1,
+            max_tokens=needed_tokens,
         )
-        if response.status_code != 200:
-            raise RuntimeError(f"Ollama returned {response.status_code}: {response.text[:200]}")
+        if not result.get("success"):
+            raise RuntimeError(result.get("error", "LLM generation failed"))
 
-        result = response.json()
-        response_text = result.get("response", "").strip()
+        response_text = result["response"].strip()
         logger.info(f"LLM response length: {len(response_text)} chars")
 
         if not response_text:
             raise ValueError("Empty LLM response")
+
+        # Strip markdown fences if present
+        if response_text.startswith("```"):
+            response_text = response_text.split("```", 2)[1]
+            if response_text.startswith("json"):
+                response_text = response_text[4:]
+            response_text = response_text.rsplit("```", 1)[0].strip()
+
+        # Find JSON object
+        start = response_text.find("{")
+        end = response_text.rfind("}")
+        if start == -1 or end == -1:
+            raise ValueError("No JSON object found in LLM response")
+        response_text = response_text[start : end + 1]
 
         structured = json.loads(response_text)
         if "title" not in structured or "sections" not in structured:
@@ -520,7 +492,7 @@ async def get_my_schemes(current_user: dict = Depends(get_current_user)):
                            sm.view_count, sm.query_count, sm.created_at, sm.updated_at
                     FROM schemes_metadata sm
                     JOIN scheme_assignments sa ON sm.scheme_id = sa.scheme_id
-                    WHERE sa.officer_id = ? AND sa.is_active = 1
+                    WHERE sa.officer_id = ? AND sa.is_active = TRUE
                     ORDER BY sm.updated_at DESC
                 """, (current_user["id"],))
             schemes = [dict(row) for row in cursor.fetchall()]
@@ -549,7 +521,7 @@ async def scheme_analytics(current_user: dict = Depends(require_role("admin"))):
             cursor.execute("""
                 SELECT u.username, COUNT(*) as uploads FROM upload_history uh
                 JOIN users u ON uh.uploaded_by = u.id WHERE uh.status = 'success'
-                GROUP BY uh.uploaded_by ORDER BY uploads DESC LIMIT 10
+                GROUP BY u.username ORDER BY uploads DESC LIMIT 10
             """)
             top_uploaders = [dict(r) for r in cursor.fetchall()]
             cursor.execute("SELECT SUM(file_size) as total_bytes, SUM(total_chunks) as total_chunks FROM schemes_metadata WHERE status = 'active'")
@@ -589,7 +561,7 @@ async def get_scheme_detail(scheme_id: str):
                 SELECT sa.officer_id, u.username, sa.can_edit, sa.can_delete
                 FROM scheme_assignments sa
                 JOIN users u ON sa.officer_id = u.id
-                WHERE sa.scheme_id = ? AND sa.is_active = 1
+                WHERE sa.scheme_id = ? AND sa.is_active = TRUE
             """, (scheme_id,))
             scheme["assignments"] = [dict(r) for r in cursor.fetchall()]
 
@@ -853,7 +825,7 @@ async def upload_scheme(
                         VALUES (?, ?, ?, 1, 0)
                     """, (scheme_id, current_user["id"], current_user["id"]))
 
-            cursor.execute("UPDATE scheme_versions SET is_current = 0 WHERE scheme_id = ?", (scheme_id,))
+            cursor.execute("UPDATE scheme_versions SET is_current = FALSE WHERE scheme_id = ?", (scheme_id,))
             cursor.execute("""
                 INSERT INTO scheme_versions
                 (scheme_id, version, changed_by, change_type, change_description,
@@ -905,7 +877,7 @@ async def get_my_schemes(current_user: dict = Depends(get_current_user)):
                            sm.view_count, sm.query_count, sm.created_at, sm.updated_at
                     FROM schemes_metadata sm
                     JOIN scheme_assignments sa ON sm.scheme_id = sa.scheme_id
-                    WHERE sa.officer_id = ? AND sa.is_active = 1
+                    WHERE sa.officer_id = ? AND sa.is_active = TRUE
                     ORDER BY sm.updated_at DESC
                 """, (current_user["id"],))
             schemes = [dict(row) for row in cursor.fetchall()]
@@ -963,9 +935,16 @@ async def assign_scheme_officer(
             if not cursor.fetchone():
                 raise HTTPException(404, f"Officer {officer_id} not found")
             cursor.execute("""
-                INSERT OR REPLACE INTO scheme_assignments
+                INSERT INTO scheme_assignments
                 (scheme_id, officer_id, assigned_by, can_edit, can_delete, is_active)
-                VALUES (?, ?, ?, ?, ?, 1)
+                VALUES (?, ?, ?, ?, ?, TRUE)
+                ON CONFLICT (scheme_id, officer_id) DO UPDATE SET
+                    assigned_by = EXCLUDED.assigned_by,
+                    can_edit = EXCLUDED.can_edit,
+                    can_delete = EXCLUDED.can_delete,
+                    is_active = TRUE,
+                    revoked_at = NULL,
+                    revoked_by = NULL
             """, (scheme_id, officer_id, current_user["id"], can_edit, can_delete))
         return {"success": True, "scheme_id": scheme_id, "officer_id": officer_id}
     except HTTPException:
@@ -983,7 +962,7 @@ async def unassign_scheme_officer(
     """Remove officer assignment."""
     try:
         with get_db() as conn:
-            conn.execute("UPDATE scheme_assignments SET is_active = 0 WHERE scheme_id = ? AND officer_id = ?", (scheme_id, officer_id))
+            conn.execute("UPDATE scheme_assignments SET is_active = FALSE WHERE scheme_id = ? AND officer_id = ?", (scheme_id, officer_id))
         return {"success": True, "scheme_id": scheme_id, "officer_id": officer_id}
     except Exception as e:
         logger.error(f"Unassign failed: {e}")
@@ -1007,7 +986,7 @@ async def scheme_analytics(current_user: dict = Depends(require_role("admin"))):
             cursor.execute("""
                 SELECT u.username, COUNT(*) as uploads FROM upload_history uh
                 JOIN users u ON uh.uploaded_by = u.id WHERE uh.status = 'success'
-                GROUP BY uh.uploaded_by ORDER BY uploads DESC LIMIT 10
+                GROUP BY u.username ORDER BY uploads DESC LIMIT 10
             """)
             top_uploaders = [dict(r) for r in cursor.fetchall()]
             cursor.execute("SELECT SUM(file_size) as total_bytes, SUM(total_chunks) as total_chunks FROM schemes_metadata WHERE status = 'active'")

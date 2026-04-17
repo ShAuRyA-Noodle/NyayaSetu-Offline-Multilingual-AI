@@ -9,51 +9,34 @@ interface PageTransitionProps {
   variant?: TransitionVariant;
 }
 
-// Easing curves (matching CSS tokens)
-const easeOutQuart = [0.25, 1, 0.5, 1] as const;
 const easeOutQuint = [0.22, 1, 0.36, 1] as const;
 
-// Transition variants
 const variants: Record<TransitionVariant, {
   variants: Variants;
   transition: Transition;
-  exitTransition?: Transition;
 }> = {
-  // Default: slide up — no blur (blur is expensive on every route change)
   default: {
     variants: {
-      initial: { opacity: 0, y: 16 },
-      animate: { opacity: 1, y: 0 },
-      exit: { opacity: 0, y: -8 },
+      initial: { opacity: 0, y: 24, scale: 0.99 },
+      animate: { opacity: 1, y: 0, scale: 1 },
+      exit: { opacity: 0, y: -12, scale: 0.995 },
     },
     transition: {
-      duration: 0.25,
-      ease: [...easeOutQuart],
-    },
-    exitTransition: {
-      duration: 0.18,
-      ease: [...easeOutQuart],
-    },
-  },
-
-  // Hero: scale + fade — no blur
-  hero: {
-    variants: {
-      initial: { opacity: 0, scale: 0.97 },
-      animate: { opacity: 1, scale: 1 },
-      exit: { opacity: 0, scale: 1.01 },
-    },
-    transition: {
-      duration: 0.3,
+      duration: 0.45,
       ease: [...easeOutQuint],
     },
-    exitTransition: {
-      duration: 0.2,
-      ease: [...easeOutQuart],
+  },
+  hero: {
+    variants: {
+      initial: { opacity: 0, scale: 0.96 },
+      animate: { opacity: 1, scale: 1 },
+      exit: { opacity: 0, scale: 1.02 },
+    },
+    transition: {
+      duration: 0.5,
+      ease: [...easeOutQuint],
     },
   },
-
-  // Panel: slide from right (for detail views, modals)
   panel: {
     variants: {
       initial: { opacity: 0, x: 40 },
@@ -61,16 +44,10 @@ const variants: Record<TransitionVariant, {
       exit: { opacity: 0, x: -20 },
     },
     transition: {
-      duration: 0.45,
-      ease: [...easeOutQuart],
-    },
-    exitTransition: {
-      duration: 0.3,
-      ease: [...easeOutQuart],
+      duration: 0.5,
+      ease: [...easeOutQuint],
     },
   },
-
-  // Fade: simple crossfade
   fade: {
     variants: {
       initial: { opacity: 0 },
@@ -78,8 +55,8 @@ const variants: Record<TransitionVariant, {
       exit: { opacity: 0 },
     },
     transition: {
-      duration: 0.3,
-      ease: [...easeOutQuart],
+      duration: 0.4,
+      ease: [...easeOutQuint],
     },
   },
 };
@@ -91,7 +68,6 @@ const PageTransition: React.FC<PageTransitionProps> = ({
 }) => {
   const config = variants[variant];
 
-  // Check reduced motion
   const reduceMotion = typeof window !== 'undefined'
     ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
     : false;
@@ -108,8 +84,6 @@ const PageTransition: React.FC<PageTransitionProps> = ({
       exit="exit"
       variants={config.variants}
       transition={config.transition}
-      // Use faster exit transition when exiting
-      style={{ willChange: 'auto' }}
     >
       {children}
     </motion.div>

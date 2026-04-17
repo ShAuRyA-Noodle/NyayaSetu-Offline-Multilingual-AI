@@ -82,12 +82,13 @@ async def initialize_services():
         logger.info("2/6 Initializing Answer Generator...")
         config = LLMConfig()
         llm_client = OllamaClient(config)
-        
+
         # Check LLM health
         if not llm_client.health_check():
             logger.warning("⚠ LLM not available - some features will use fallbacks")
         else:
-            logger.info(f"✓ LLM available: {config.model}")
+            backend = "Groq Cloud" if llm_client._use_groq else f"Ollama ({config.model})"
+            logger.info(f"✓ LLM available: {backend}")
         
         _app_state.answer_generator = AnswerGenerator(llm_client=llm_client)
         logger.info("✓ Answer Generator initialized")

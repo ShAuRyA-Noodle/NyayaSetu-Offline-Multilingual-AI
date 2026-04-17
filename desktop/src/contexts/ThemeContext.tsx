@@ -12,10 +12,8 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [darkMode, setDarkMode] = useState<boolean>(() => {
-    const saved = localStorage.getItem('darkMode');
-    return saved ? JSON.parse(saved) : false;
-  });
+  // Dark mode is always on — no toggle, one unified theme
+  const darkMode = true;
 
   const [cursorEnabled, setCursorEnabled] = useState<boolean>(() => {
     const saved = localStorage.getItem('cursorEnabled');
@@ -27,14 +25,10 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return saved ? JSON.parse(saved) : false;
   });
 
+  // Always apply dark class
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-    localStorage.setItem('darkMode', JSON.stringify(darkMode));
-  }, [darkMode]);
+    document.documentElement.classList.add('dark');
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('cursorEnabled', JSON.stringify(cursorEnabled));
@@ -44,7 +38,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.setItem('reducedMotion', JSON.stringify(reducedMotion));
   }, [reducedMotion]);
 
-  const toggleDarkMode = () => setDarkMode(prev => !prev);
+  const toggleDarkMode = () => {}; // no-op, kept for interface compatibility
   const toggleCursor = () => setCursorEnabled(prev => !prev);
   const toggleReducedMotion = () => setReducedMotion(prev => !prev);
 

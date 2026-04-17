@@ -37,9 +37,10 @@ def create_sla_record(grievance_id: str, department: str, priority: str):
             due_date = datetime.utcnow() + timedelta(hours=sla_hours)
 
             cursor.execute("""
-                INSERT OR IGNORE INTO grievance_sla
+                INSERT INTO grievance_sla
                 (grievance_id, sla_hours, due_date)
                 VALUES (?, ?, ?)
+                ON CONFLICT (grievance_id) DO NOTHING
             """, (grievance_id, sla_hours, due_date.isoformat()))
             conn.commit()
 
@@ -97,9 +98,9 @@ def check_all_sla_breaches():
                        g.department, g.assigned_officer_name
                 FROM grievance_sla gs
                 JOIN grievances g ON gs.grievance_id = g.grievance_id
-                WHERE gs.is_breached = 0
+                WHERE gs.is_breached = FALSE
                   AND gs.resolved_at IS NULL
-                  AND gs.is_paused = 0
+                  AND gs.is_paused = FALSE
                   AND gs.due_date < ?
             """, (now,))
 
@@ -110,7 +111,7 @@ def check_all_sla_breaches():
 
                 conn.execute("""
                     UPDATE grievance_sla
-                    SET is_breached = 1, breached_at = ?,
+                    SET is_breached = TRUE, breached_at = ?,
                         breach_duration_hours = ?, updated_at = ?
                     WHERE grievance_id = ?
                 """, (now, hours_overdue, now, breach["grievance_id"]))
@@ -130,8 +131,8 @@ def pause_sla(grievance_id: str, reason: str):
         with get_db() as conn:
             conn.execute("""
                 UPDATE grievance_sla
-                SET is_paused = 1, paused_at = ?, pause_reason = ?, updated_at = ?
-                WHERE grievance_id = ? AND is_paused = 0
+                SET is_paused = TRUE, paused_at = ?, pause_reason = ?, updated_at = ?
+                WHERE grievance_id = ? AND is_paused = FALSE
             """, (now, reason, now, grievance_id))
     except Exception as e:
         logger.error(f"SLA pause failed: {e}")
@@ -144,7 +145,7 @@ def resume_sla(grievance_id: str):
         with get_db() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT paused_at, due_date FROM grievance_sla WHERE grievance_id = ? AND is_paused = 1",
+                "SELECT paused_at, due_date FROM grievance_sla WHERE grievance_id = ? AND is_paused = TRUE",
                 (grievance_id,),
             )
             row = cursor.fetchone()
@@ -159,7 +160,7 @@ def resume_sla(grievance_id: str):
 
             conn.execute("""
                 UPDATE grievance_sla
-                SET is_paused = 0, paused_at = NULL,
+                SET is_paused = FALSE, paused_at = NULL,
                     total_paused_hours = COALESCE(total_paused_hours, 0) + ?,
                     due_date = ?, updated_at = ?
                 WHERE grievance_id = ?
@@ -263,7 +264,7 @@ def get_sla_dashboard() -> dict:
                 SELECT gs.grievance_id, g.department, g.priority, gs.due_date, gs.breached_at
                 FROM grievance_sla gs
                 JOIN grievances g ON gs.grievance_id = g.grievance_id
-                WHERE gs.is_breached = 1 AND gs.resolved_at IS NULL
+                WHERE gs.is_breached = TRUE AND gs.resolved_at IS NULL
                 ORDER BY gs.breached_at ASC LIMIT 20
             """)
             active_breaches = [dict(r) for r in cursor.fetchall()]

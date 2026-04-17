@@ -30,6 +30,7 @@ class NyayaVaaniService:
         self._cleanup_task: Optional[asyncio.Task] = None
         self._ollama_models: list[str] = []
         self._sarvam_healthy = False
+        self._llm_healthy = False
 
     async def initialize(self) -> None:
         """Initialize all engines and run health checks."""
@@ -46,7 +47,10 @@ class NyayaVaaniService:
         if self.config.is_online_mode:
             await self._check_sarvam_health()
 
-        # Check Ollama models
+        # Check LLM availability (Groq or Ollama)
+        self._check_llm_health()
+
+        # Check Ollama models (optional, for status display)
         await self._check_ollama_models()
 
         # Start background cleanup
@@ -72,8 +76,8 @@ class NyayaVaaniService:
             "status": "healthy",
             "mode": "online" if self.config.is_online_mode else "offline",
             "sarvam_api": self._sarvam_healthy,
-            "ollama_available": len(self._ollama_models) > 0,
-            "ollama_models": self._ollama_models,
+            "ollama_available": self._llm_healthy or len(self._ollama_models) > 0,
+            "ollama_models": self._ollama_models if self._ollama_models else (["Groq Cloud"] if self._llm_healthy else []),
             "supported_languages": 12,
             "audio_cleanup_enabled": True,
         }
@@ -95,6 +99,21 @@ class NyayaVaaniService:
         except Exception as e:
             logger.warning(f"Sarvam API unreachable: {e}. Using offline mode.")
             self._sarvam_healthy = False
+
+    def _check_llm_health(self) -> None:
+        """Check if the shared LLM client (Groq or Ollama) is reachable."""
+        try:
+            from src.generation.llm_client import create_client
+            client = create_client()
+            self._llm_healthy = client.health_check()
+            if self._llm_healthy:
+                backend = "Groq Cloud" if client._use_groq else "Ollama Local"
+                logger.info(f"LLM health check passed ({backend})")
+            else:
+                logger.warning("LLM health check failed")
+        except Exception as e:
+            logger.warning(f"LLM health check error: {e}")
+            self._llm_healthy = False
 
     async def _check_ollama_models(self) -> None:
         """Check which Ollama models are available."""

@@ -27,8 +27,8 @@ const AdminDashboard: React.FC = () => {
       <div className="p-4 md:p-6">
         <div className="max-w-7xl mx-auto">
           <div className="mb-6">
-            <h1 className="text-3xl font-bold font-display text-mitti-900 dark:text-kora-100 mb-2">{t('admin.title', 'Admin Dashboard')}</h1>
-            <p className="text-mitti-600 dark:text-mitti-400">System administration and monitoring</p>
+            <h1 className="text-2xl md:text-3xl font-bold font-display text-kora-100 tracking-tight mb-2">{t('admin.title', 'Admin Dashboard')}</h1>
+            <p className="text-sm text-mitti-500/40">System administration and monitoring</p>
           </div>
 
           <div className="flex space-x-2 mb-6 village-card p-2 rounded-xl inline-flex flex-wrap">
@@ -122,7 +122,7 @@ const OverviewTab: React.FC = () => {
       {/* Trends Chart */}
       {trends.length > 0 && (
         <div className="village-card rounded-xl p-6">
-          <h2 className="text-lg font-semibold font-display text-mitti-900 dark:text-kora-100 mb-4">14-Day Trends</h2>
+          <h2 className="text-lg font-semibold font-display text-kora-100 mb-4">14-Day Trends</h2>
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={trends}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -139,7 +139,7 @@ const OverviewTab: React.FC = () => {
       {/* Officer Performance */}
       {officers.length > 0 && (
         <div className="village-card rounded-xl p-6">
-          <h2 className="text-lg font-semibold font-display text-mitti-900 dark:text-kora-100 mb-4">Officer Performance</h2>
+          <h2 className="text-lg font-semibold font-display text-kora-100 mb-4">Officer Performance</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -525,7 +525,7 @@ const OfficerCodesTab: React.FC = () => {
     <div className="space-y-6">
       {/* Generate Form */}
       <div className="village-card rounded-xl p-6">
-        <h2 className="text-lg font-semibold font-display text-mitti-900 dark:text-kora-100 mb-4 flex items-center">
+        <h2 className="text-lg font-semibold font-display text-kora-100 mb-4 flex items-center">
           <KeyRound className="w-5 h-5 mr-2 text-mitti-600" />{t('admin.generateCode', 'Generate Officer Registration Code')}
         </h2>
         <div className="flex flex-wrap gap-3 items-end">
@@ -782,7 +782,7 @@ const SystemTab: React.FC = () => {
     <div className="space-y-6">
       {/* Health Status */}
       <div className="village-card rounded-xl p-6">
-        <h2 className="text-lg font-semibold font-display text-mitti-900 dark:text-kora-100 mb-4">{t('admin.systemHealthTab', 'System Health')}</h2>
+        <h2 className="text-lg font-semibold font-display text-kora-100 mb-4">{t('admin.systemHealthTab', 'System Health')}</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="village-card p-4 rounded-lg border border-green-200 dark:border-green-800">
             <div className="flex items-center space-x-2 mb-2">
@@ -812,7 +812,7 @@ const SystemTab: React.FC = () => {
 
       {/* Actions */}
       <div className="village-card rounded-xl p-6">
-        <h2 className="text-lg font-semibold font-display text-mitti-900 dark:text-kora-100 mb-4">System Actions</h2>
+        <h2 className="text-lg font-semibold font-display text-kora-100 mb-4">System Actions</h2>
         <div className="flex flex-wrap gap-3">
           <button onClick={handleClearCache} disabled={clearing}
             className="px-4 py-2 btn-mitti rounded-lg font-medium disabled:bg-mitti-400 flex items-center space-x-2">

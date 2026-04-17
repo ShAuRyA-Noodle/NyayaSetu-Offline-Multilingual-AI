@@ -33,10 +33,10 @@ const Schemes: React.FC = () => {
       <div className="p-4 md:p-6">
         <div className="max-w-7xl mx-auto">
           <div className="mb-6">
-            <h1 className="text-3xl font-bold font-display text-mitti-900 dark:text-kora-100 mb-2">
+            <h1 className="text-2xl md:text-3xl font-bold font-display text-kora-100 tracking-tight mb-1">
               {t('schemes.title', 'Government Schemes')}
             </h1>
-            <p className="text-mitti-600 dark:text-mitti-400">
+            <p className="text-sm text-mitti-500/40">
               {t('schemes.subtitle', 'Explore and manage government welfare programs')}
             </p>
           </div>

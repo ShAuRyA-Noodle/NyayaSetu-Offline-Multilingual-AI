@@ -1,18 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import {
-  Bell, HardDrive,
-  Trash2, Download, Info, Check, X, RefreshCw, Lock, Shield, Monitor,
+  Bell, HardDrive, Trash2, Download, Info, Check, X, RefreshCw, Lock, Shield, Monitor,
   Smartphone, Laptop, Eye, EyeOff, AlertCircle, Globe,
 } from 'lucide-react';
 import apiService from '../services/api';
-import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import PageTransition from '../components/ui/PageTransition';
 import ThemedSpinner from '../components/ui/ThemedSpinner';
-import AshokaChakra from '../components/decorative/AshokaChakra';
-import TricolorDivider from '../components/decorative/TricolorDivider';
 
 interface Session {
   id: number;
@@ -25,7 +21,6 @@ interface Session {
 }
 
 const Settings: React.FC = () => {
-  const { darkMode, toggleDarkMode } = useTheme();
   const { user } = useAuth();
   const { t, i18n } = useTranslation();
   const [notifications, setNotifications] = useState(true);
@@ -99,7 +94,6 @@ const Settings: React.FC = () => {
   };
 
   const handleSaveSettings = () => {
-    localStorage.setItem('darkMode', darkMode.toString());
     localStorage.setItem('notifications', notifications.toString());
     localStorage.setItem('autoSync', autoSync.toString());
     localStorage.setItem('language', language);
@@ -112,7 +106,7 @@ const Settings: React.FC = () => {
   };
 
   const handleExportData = () => {
-    const data = { settings: { darkMode, notifications, autoSync, language }, timestamp: new Date().toISOString(), version: '2.0.0' };
+    const data = { settings: { notifications, autoSync, language }, timestamp: new Date().toISOString(), version: '2.0.0' };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = `nyayasetu-settings-${Date.now()}.json`; a.click();
@@ -122,70 +116,77 @@ const Settings: React.FC = () => {
   const getDeviceIcon = (d: string) => d === 'mobile' ? Smartphone : d === 'tablet' ? Monitor : Laptop;
   const formatDate = (d: string) => new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-  const SettingCard = ({ icon: Icon, title, children, color }: { icon: any; title: string; children: React.ReactNode; color: string }) => (
-    <motion.div className="village-card p-5 md:p-6" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-      <div className="flex items-center space-x-3 mb-4">
-        <div className={`p-2.5 rounded-xl ${color} shadow-sm`}>
-          <Icon className="w-5 h-5 text-white" />
-        </div>
-        <h3 className="text-lg font-semibold text-mitti-900 dark:text-kora-100">{title}</h3>
-      </div>
-      <div className="space-y-4">{children}</div>
-    </motion.div>
-  );
-
+  // ─── Toggle ───
   const Toggle = ({ label, value, onChange, description }: any) => (
-    <div className="flex items-center justify-between">
+    <div className="flex items-center justify-between py-1">
       <div className="flex-1">
-        <p className="font-medium text-mitti-900 dark:text-kora-100">{label}</p>
-        {description && <p className="text-sm text-mitti-500 dark:text-mitti-400 mt-0.5">{description}</p>}
+        <p className="text-sm font-medium text-kora-200">{label}</p>
+        {description && <p className="text-xs text-slate-400/40 mt-0.5">{description}</p>}
       </div>
       <button onClick={() => onChange(!value)}
-        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${value ? 'bg-mitti-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
-        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${value ? 'translate-x-6' : 'translate-x-1'}`} />
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
+          value ? 'bg-[#0D92F4]' : 'bg-white/[0.08]'
+        }`}>
+        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 shadow-sm ${
+          value ? 'translate-x-6' : 'translate-x-1'
+        }`} />
       </button>
     </div>
   );
 
+  // ─── Password Input ───
   const PasswordInput = ({ label, value, onChange, show, onToggle, placeholder }: any) => (
     <div>
-      <label className="block text-sm font-medium text-mitti-700 dark:text-mitti-300 mb-1">{label}</label>
-      <div className="relative">
-        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-mitti-400 w-4 h-4" />
+      <label className="block text-xs font-medium text-slate-400/50 mb-1.5 uppercase tracking-wider">{label}</label>
+      <div className="relative group">
+        <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400/40 group-focus-within:text-[#77CDFF] transition-colors" />
         <input type={show ? 'text' : 'password'} value={value} onChange={onChange} placeholder={placeholder} required
           className="w-full pl-10 pr-10 py-2.5 village-input text-sm" />
-        <button type="button" onClick={onToggle} className="absolute right-3 top-1/2 -translate-y-1/2 text-mitti-400 hover:text-mitti-500 transition-colors">
+        <button type="button" onClick={onToggle}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500/30 hover:text-[#77CDFF] transition-colors">
           {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
         </button>
       </div>
     </div>
   );
 
+  // ─── Section Card ───
+  const Section = ({ icon: Icon, title, children }: { icon: any; title: string; children: React.ReactNode }) => (
+    <motion.div className="village-card p-5"
+      initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+      <div className="flex items-center gap-3 mb-5">
+        <div className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center">
+          <Icon className="w-4 h-4 text-slate-400/60" />
+        </div>
+        <h3 className="text-sm font-semibold text-kora-200 uppercase tracking-wider">{title}</h3>
+      </div>
+      <div className="space-y-4">{children}</div>
+    </motion.div>
+  );
+
   return (
     <PageTransition>
-      <div className="p-4 md:p-6 min-h-screen">
-        <div className="max-w-4xl mx-auto">
+      <div className="p-4 md:p-6 lg:p-8 min-h-screen">
+        <div className="max-w-2xl mx-auto">
           {/* Header */}
-          <div className="text-center mb-8">
-            <div className="inline-block mb-3">
-              <AshokaChakra size={48} />
-            </div>
-            <h1 className="text-3xl md:text-4xl font-bold font-display text-mitti-900 dark:text-kora-100 mb-2">{t('settings.title')}</h1>
-            <p className="text-mitti-600 dark:text-mitti-400">{t('settings.subtitle')}</p>
-            <TricolorDivider className="mt-3" width="w-20" />
+          <div className="mb-8">
+            <h1 className="text-2xl font-display font-bold text-kora-100 tracking-tight">{t('settings.title')}</h1>
+            <p className="text-sm text-slate-400/40 mt-1">{t('settings.subtitle')}</p>
           </div>
 
-          {savedMessage && (
-            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-              className="mb-6 glass-green p-4 flex items-center space-x-3">
-              <Check className="w-5 h-5 text-india-green-600" />
-              <p className="text-india-green-800 dark:text-india-green-300 font-medium">{savedMessage}</p>
-            </motion.div>
-          )}
+          <AnimatePresence>
+            {savedMessage && (
+              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className="mb-6 p-3 rounded-xl bg-india-green-500/10 border border-india-green-500/20 flex items-center gap-2">
+                <Check className="w-4 h-4 text-india-green-400" />
+                <p className="text-sm text-india-green-400 font-medium">{savedMessage}</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          <div className="space-y-6">
+          <div className="space-y-4">
             {/* Security */}
-            <SettingCard icon={Shield} title={t('settings.security')} color="bg-red-500">
+            <Section icon={Shield} title={t('settings.security')}>
               <form onSubmit={handleChangePassword} className="space-y-3">
                 <PasswordInput label={t('settings.currentPassword')} value={passwordForm.current}
                   onChange={(e: any) => setPasswordForm({ ...passwordForm, current: e.target.value })}
@@ -199,47 +200,48 @@ const Settings: React.FC = () => {
                   onChange={(e: any) => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
                   show={showPasswords.confirm} onToggle={() => setShowPasswords({ ...showPasswords, confirm: !showPasswords.confirm })}
                   placeholder={t('settings.confirmNewPassword')} />
-                {passwordError && <div className="flex items-center space-x-2 text-red-500 text-sm"><AlertCircle className="w-4 h-4" /><span>{passwordError}</span></div>}
-                {passwordSuccess && <div className="flex items-center space-x-2 text-india-green-600 text-sm"><Check className="w-4 h-4" /><span>{passwordSuccess}</span></div>}
-                <motion.button type="submit" disabled={passwordLoading || !passwordForm.current || !passwordForm.newPw || !passwordForm.confirm}
-                  className="w-full py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl font-medium transition-colors disabled:opacity-50 flex items-center justify-center"
-                  whileTap={{ scale: 0.98 }}>
-                  {passwordLoading ? <ThemedSpinner size="sm" /> : <><Lock className="w-4 h-4 mr-2" />{t('settings.updatePassword')}</>}
-                </motion.button>
+                {passwordError && <div className="flex items-center gap-2 text-red-400 text-xs"><AlertCircle className="w-3.5 h-3.5" /><span>{passwordError}</span></div>}
+                {passwordSuccess && <div className="flex items-center gap-2 text-india-green-400 text-xs"><Check className="w-3.5 h-3.5" /><span>{passwordSuccess}</span></div>}
+                <button type="submit" disabled={passwordLoading || !passwordForm.current || !passwordForm.newPw || !passwordForm.confirm}
+                  className="w-full py-2.5 rounded-xl text-sm font-semibold bg-white/[0.06] border border-white/[0.08] text-kora-200 hover:bg-white/[0.08] disabled:opacity-30 transition-all flex items-center justify-center gap-2">
+                  {passwordLoading ? <ThemedSpinner size="sm" /> : <>{t('settings.updatePassword')}</>}
+                </button>
               </form>
-            </SettingCard>
+            </Section>
 
             {/* Sessions */}
-            <SettingCard icon={Monitor} title={t('settings.sessions')} color="bg-terracotta-500">
+            <Section icon={Monitor} title={t('settings.sessions')}>
               <div className="flex items-center justify-between mb-2">
-                <p className="text-sm text-mitti-500">{sessions.length} session{sessions.length !== 1 ? 's' : ''}</p>
-                <div className="flex space-x-2">
-                  <button onClick={loadSessions} className="text-sm text-mitti-600 hover:text-mitti-700 font-medium">{t('common.refresh')}</button>
-                  {sessions.length > 1 && <button onClick={handleRevokeAll} className="text-sm text-red-500 hover:text-red-600 font-medium">{t('settings.revokeAllSessions')}</button>}
+                <p className="text-xs text-slate-400/40">{sessions.length} active session{sessions.length !== 1 ? 's' : ''}</p>
+                <div className="flex gap-3">
+                  <button onClick={loadSessions} className="text-xs text-slate-400/50 hover:text-[#77CDFF] font-medium transition-colors">{t('common.refresh')}</button>
+                  {sessions.length > 1 && <button onClick={handleRevokeAll} className="text-xs text-red-400/60 hover:text-red-400 font-medium transition-colors">{t('settings.revokeAllSessions')}</button>}
                 </div>
               </div>
               {sessionsLoading ? <div className="text-center py-4"><ThemedSpinner size="sm" /></div>
-              : sessions.length === 0 ? <p className="text-mitti-500 text-sm text-center py-4">No active sessions</p>
+              : sessions.length === 0 ? <p className="text-slate-500/30 text-xs text-center py-4">No active sessions</p>
               : <div className="space-y-2">
                   {sessions.map((session, index) => {
                     const DeviceIcon = getDeviceIcon(session.device_type);
                     const isCurrent = index === 0;
                     return (
-                      <div key={session.id} className={`p-3 rounded-xl border ${isCurrent ? 'bg-mitti-500/10 border-mitti-500/20' : 'village-card-subtle'}`}>
+                      <div key={session.id} className={`p-3 rounded-xl border transition-colors ${
+                        isCurrent ? 'bg-[#0D92F4]/[0.06] border-[#0D92F4]/15' : 'bg-white/[0.02] border-white/[0.04]'
+                      }`}>
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
-                            <DeviceIcon className="w-5 h-5 text-mitti-500" />
+                          <div className="flex items-center gap-3">
+                            <DeviceIcon className="w-4 h-4 text-slate-400/50" />
                             <div>
-                              <div className="flex items-center space-x-2">
-                                <p className="text-sm font-medium text-mitti-900 dark:text-kora-100 capitalize">{session.device_type}</p>
-                                {isCurrent && <span className="px-2 py-0.5 bg-mitti-500 text-white text-xs rounded-full">{t('settings.currentSession')}</span>}
+                              <div className="flex items-center gap-2">
+                                <p className="text-xs font-medium text-kora-200 capitalize">{session.device_type}</p>
+                                {isCurrent && <span className="px-1.5 py-0.5 bg-[#0D92F4]/20 text-[#77CDFF] text-[10px] rounded-md font-semibold">{t('settings.currentSession')}</span>}
                               </div>
-                              <p className="text-xs text-mitti-500">{session.ip_address || 'Unknown IP'} - {formatDate(session.last_activity)}</p>
+                              <p className="text-[10px] text-slate-500/30">{session.ip_address || 'Unknown IP'} · {formatDate(session.last_activity)}</p>
                             </div>
                           </div>
                           {!isCurrent && (
                             <button onClick={() => handleRevokeSession(session.id)} disabled={revokingId === session.id}
-                              className="px-3 py-1.5 text-xs text-red-500 hover:bg-red-500/10 rounded-lg font-medium transition-colors disabled:opacity-50">
+                              className="px-2.5 py-1 text-[11px] text-red-400/60 hover:text-red-400 hover:bg-red-500/[0.06] rounded-lg font-medium transition-colors disabled:opacity-30">
                               {revokingId === session.id ? '...' : t('settings.revokeSession')}
                             </button>
                           )}
@@ -249,101 +251,92 @@ const Settings: React.FC = () => {
                   })}
                 </div>
               }
-            </SettingCard>
+            </Section>
 
-            {/* Appearance & Language */}
-            <SettingCard icon={Globe} title={t('settings.appearance')} color="bg-mitti-500">
-              <Toggle label={t('settings.darkModeLabel')} value={darkMode} onChange={toggleDarkMode} description={t('settings.darkModeDesc')} />
+            {/* Language */}
+            <Section icon={Globe} title={t('settings.appearance')}>
               <div>
-                <label className="block text-sm font-medium text-mitti-700 dark:text-mitti-300 mb-2">{t('settings.interfaceLanguage')}</label>
-                <div className="grid grid-cols-2 gap-3">
+                <label className="block text-xs font-medium text-slate-400/50 mb-2 uppercase tracking-wider">{t('settings.interfaceLanguage')}</label>
+                <div className="grid grid-cols-2 gap-2">
                   {[
-                    { code: 'en', label: t('common.english'), sub: 'English' },
-                    { code: 'hi', label: t('common.hindi'), sub: 'हिंदी' },
+                    { code: 'en', label: 'English' },
+                    { code: 'hi', label: 'हिंदी' },
                   ].map((lang) => (
-                    <motion.button key={lang.code} onClick={() => handleLanguageChange(lang.code)}
-                      className={`p-4 rounded-xl border-2 transition-all text-center ${
+                    <button key={lang.code} onClick={() => handleLanguageChange(lang.code)}
+                      className={`p-3 rounded-xl text-center transition-all duration-200 border ${
                         language === lang.code
-                          ? 'border-mitti-500 bg-mitti-500/10 shadow-mitti'
-                          : 'border-mitti-200/20 dark:border-night-border/10 hover:border-mitti-300 village-card-subtle'
-                      }`}
-                      whileTap={{ scale: 0.97 }}>
-                      <p className="font-bold text-mitti-900 dark:text-kora-100 text-lg">{lang.sub}</p>
-                      <p className="text-xs text-mitti-500 dark:text-mitti-400 mt-0.5">{lang.label}</p>
-                      {language === lang.code && <Check className="w-4 h-4 text-mitti-500 mx-auto mt-2" />}
-                    </motion.button>
+                          ? 'border-[#0D92F4]/30 bg-[#0D92F4]/[0.08] text-kora-200'
+                          : 'border-white/[0.04] text-slate-400/50 hover:border-white/[0.08]'
+                      }`}>
+                      <p className="font-bold text-base">{lang.label}</p>
+                      {language === lang.code && <Check className="w-3.5 h-3.5 text-[#77CDFF] mx-auto mt-1.5" />}
+                    </button>
                   ))}
                 </div>
               </div>
-            </SettingCard>
+            </Section>
 
             {/* Notifications */}
-            <SettingCard icon={Bell} title={t('settings.notifications')} color="bg-haldi-500">
+            <Section icon={Bell} title={t('settings.notifications')}>
               <Toggle label={t('settings.emailNotifications')} value={notifications} onChange={setNotifications} description={t('settings.emailNotifDesc')} />
-            </SettingCard>
+            </Section>
 
-            {/* Sync */}
-            <SettingCard icon={RefreshCw} title={t('settings.syncStatus')} color="bg-india-green-500">
+            {/* Sync Status */}
+            <Section icon={RefreshCw} title={t('settings.syncStatus')}>
               <Toggle label="Auto-sync" value={autoSync} onChange={setAutoSync} description="Sync on connection restore" />
-              <div className={`p-4 rounded-xl border ${
-                apiStatus === 'online' ? 'bg-india-green-500/10 border-india-green-500/20'
-                : apiStatus === 'checking' ? 'bg-haldi-500/10 border-haldi-500/20'
-                : 'bg-red-500/10 border-red-500/20'
+              <div className={`p-3 rounded-xl border ${
+                apiStatus === 'online' ? 'bg-india-green-500/[0.06] border-india-green-500/15'
+                : apiStatus === 'checking' ? 'bg-haldi-500/[0.06] border-haldi-500/15'
+                : 'bg-red-500/[0.06] border-red-500/15'
               }`}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center space-x-2">
-                    {apiStatus === 'online' ? <Check className="w-4 h-4 text-india-green-600" />
-                    : apiStatus === 'checking' ? <RefreshCw className="w-4 h-4 text-haldi-600 animate-spin" />
-                    : <X className="w-4 h-4 text-red-500" />}
-                    <p className="font-medium text-mitti-900 dark:text-kora-100 text-sm">Backend API</p>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    {apiStatus === 'online' ? <div className="w-2 h-2 bg-india-green-500 rounded-full" />
+                    : apiStatus === 'checking' ? <RefreshCw className="w-3.5 h-3.5 text-haldi-400 animate-spin" />
+                    : <X className="w-3.5 h-3.5 text-red-400" />}
+                    <p className="text-xs font-medium text-kora-200">Backend API</p>
                   </div>
-                  <button onClick={checkApiStatus} className="text-xs text-mitti-600 font-medium">{t('common.refresh')}</button>
+                  <button onClick={checkApiStatus} className="text-[11px] text-slate-400/40 font-medium hover:text-[#77CDFF] transition-colors">{t('common.refresh')}</button>
                 </div>
-                <p className="text-xs text-mitti-500">{t('settings.lastSync')}: {lastSync.toLocaleTimeString()}</p>
+                <p className="text-[10px] text-slate-500/30">{t('settings.lastSync')}: {lastSync.toLocaleTimeString()}</p>
               </div>
-            </SettingCard>
+            </Section>
 
-            {/* Data */}
-            <SettingCard icon={HardDrive} title={t('settings.dataManagement')} color="bg-terracotta-400">
-              <div className="grid grid-cols-2 gap-3">
-                <motion.button onClick={handleClearCache}
-                  className="px-4 py-3 bg-red-500 text-white rounded-xl font-medium flex items-center justify-center space-x-2 text-sm hover:bg-red-600 transition-colors"
-                  whileTap={{ scale: 0.97 }}>
-                  <Trash2 className="w-4 h-4" /><span>{t('settings.clearCache')}</span>
-                </motion.button>
-                <motion.button onClick={handleExportData}
-                  className="btn-mitti text-sm py-3 flex items-center justify-center space-x-2"
-                  whileTap={{ scale: 0.97 }}>
-                  <Download className="w-4 h-4" /><span>{t('settings.exportData')}</span>
-                </motion.button>
+            {/* Data Management */}
+            <Section icon={HardDrive} title={t('settings.dataManagement')}>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={handleClearCache}
+                  className="px-4 py-2.5 rounded-xl text-sm font-medium bg-red-500/[0.08] border border-red-500/15 text-red-400 hover:bg-red-500/15 transition-colors flex items-center justify-center gap-2">
+                  <Trash2 className="w-3.5 h-3.5" />{t('settings.clearCache')}
+                </button>
+                <button onClick={handleExportData}
+                  className="px-4 py-2.5 rounded-xl text-sm font-medium bg-white/[0.04] border border-white/[0.06] text-kora-200 hover:bg-white/[0.06] transition-colors flex items-center justify-center gap-2">
+                  <Download className="w-3.5 h-3.5" />{t('settings.exportData')}
+                </button>
               </div>
-            </SettingCard>
+            </Section>
 
             {/* About */}
-            <SettingCard icon={Info} title={t('settings.about')} color="bg-mitti-500">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 village-card-subtle rounded-xl">
-                  <p className="text-xs text-mitti-500">{t('settings.version')}</p>
-                  <p className="text-lg font-bold text-mitti-900 dark:text-kora-100">2.0.0</p>
+            <Section icon={Info} title={t('settings.about')}>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                  <p className="text-[10px] text-slate-500/30 uppercase tracking-wider">{t('settings.version')}</p>
+                  <p className="text-lg font-bold text-kora-100 mt-0.5">2.0.0</p>
                 </div>
-                <div className="p-3 village-card-subtle rounded-xl">
-                  <p className="text-xs text-mitti-500">{t('admin.role')}</p>
-                  <p className="text-lg font-bold text-mitti-600 dark:text-mitti-400 capitalize">{user?.role || 'N/A'}</p>
+                <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                  <p className="text-[10px] text-slate-500/30 uppercase tracking-wider">{t('admin.role')}</p>
+                  <p className="text-lg font-bold text-[#77CDFF] capitalize mt-0.5">{user?.role || 'N/A'}</p>
                 </div>
               </div>
-              <div className="p-3 glass-saffron rounded-xl">
-                <p className="text-sm text-mitti-800 dark:text-mitti-200">
-                  <strong>{t('common.appName')}</strong> - Bridging rural citizens and government services through AI-powered governance assistance.
-                </p>
-              </div>
-            </SettingCard>
+            </Section>
           </div>
 
-          <div className="mt-8 flex items-center justify-center pb-6">
+          {/* Save button */}
+          <div className="mt-8 flex items-center justify-center pb-8">
             <motion.button onClick={handleSaveSettings}
-              className="btn-mitti text-base md:text-lg px-6 md:px-8 py-3 md:py-4 flex items-center space-x-2"
-              whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-              <Check className="w-6 h-6" /><span>{t('common.save')}</span>
+              className="btn-mitti text-sm px-8 py-3 flex items-center gap-2"
+              whileTap={{ scale: 0.97 }}>
+              <Check className="w-4 h-4" />{t('common.save')}
             </motion.button>
           </div>
         </div>

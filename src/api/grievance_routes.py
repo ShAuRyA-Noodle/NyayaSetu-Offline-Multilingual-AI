@@ -591,9 +591,15 @@ async def update_sla_config(
     try:
         with get_db() as conn:
             conn.execute("""
-                INSERT OR REPLACE INTO sla_config
+                INSERT INTO sla_config
                 (department, critical_sla_hours, high_sla_hours, medium_sla_hours, low_sla_hours, updated_at)
                 VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (department) DO UPDATE SET
+                    critical_sla_hours = EXCLUDED.critical_sla_hours,
+                    high_sla_hours = EXCLUDED.high_sla_hours,
+                    medium_sla_hours = EXCLUDED.medium_sla_hours,
+                    low_sla_hours = EXCLUDED.low_sla_hours,
+                    updated_at = EXCLUDED.updated_at
             """, (department, critical_sla_hours, high_sla_hours, medium_sla_hours, low_sla_hours))
         return {"success": True, "department": department}
     except Exception as e:
@@ -935,7 +941,7 @@ async def get_comments(
                     SELECT id, author_name, author_role, comment_text, comment_type,
                            is_public, created_at
                     FROM grievance_comments
-                    WHERE grievance_id = ? AND is_public = 1
+                    WHERE grievance_id = ? AND is_public = TRUE
                     ORDER BY created_at ASC
                 """, (grievance_id,))
             else:
@@ -981,10 +987,17 @@ async def rate_grievance(
                 raise HTTPException(403, "Only the submitting citizen can rate")
 
             cursor.execute("""
-                INSERT OR REPLACE INTO grievance_ratings
+                INSERT INTO grievance_ratings
                 (grievance_id, citizen_id, rating, resolution_quality,
                  response_time, officer_behavior, feedback_text)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (grievance_id) DO UPDATE SET
+                    citizen_id = EXCLUDED.citizen_id,
+                    rating = EXCLUDED.rating,
+                    resolution_quality = EXCLUDED.resolution_quality,
+                    response_time = EXCLUDED.response_time,
+                    officer_behavior = EXCLUDED.officer_behavior,
+                    feedback_text = EXCLUDED.feedback_text
             """, (
                 grievance_id, current_user["id"], rating,
                 resolution_quality, response_time, officer_behavior, feedback_text,

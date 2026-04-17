@@ -1,0 +1,67 @@
+# =============================================================================
+# NyayaSetu Local Dev / Test Stack
+#
+# Usage:
+#   1. Start Postgres for local Neon-like testing:
+#        docker-compose up -d postgres
+#   2. Point your backend at it:
+#        export DATABASE_URL="postgresql://nyaya:nyaya@localhost:5433/nyayasetu"
+#      (or PowerShell: $env:DATABASE_URL = "postgresql://nyaya:nyaya@localhost:5433/nyayasetu")
+#   3. Run the backend normally:
+#        python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8001 --reload
+#   4. To wipe data and start fresh:
+#        docker-compose down -v
+# =============================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nyaya_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nyaya
+      POSTGRES_PASSWORD: nyaya
+      POSTGRES_DB: nyayasetu
+      # Align encoding with Neon defaults
+      LANG: en_US.utf8
+    ports:
+      # Mapped to 5433 on host to avoid conflicts with other local Postgres instances.
+      # Connection string: postgresql://nyaya:nyaya@localhost:5433/nyayasetu
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nyaya -d nyayasetu"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Optional: run the backend in a container too (parity test with production).
+  # Enable with: docker-compose --profile backend up
+  backend:
+    profiles: ["backend"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nyaya_backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ENV: production
+      DATABASE_URL: postgresql://nyaya:nyaya@postgres:5432/nyayasetu
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      SARVAM_API_KEY: ${SARVAM_API_KEY}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-local-dev-secret-change-me}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      PORT: "8001"
+    ports:
+      - "8001:8001"
+    volumes:
+      # Mount FAISS + models as read-only so Docker matches production
+      - ./data:/app/data:ro
+      - ./models:/app/models:ro
+
+volumes:
+  postgres_data:
+    name: nyaya_postgres_data

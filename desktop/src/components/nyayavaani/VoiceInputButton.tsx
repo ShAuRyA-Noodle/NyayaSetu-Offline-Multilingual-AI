@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Mic, MicOff, Loader2 } from 'lucide-react';
+import { Mic, Square, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useTranslation } from 'react-i18next';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
 
@@ -10,92 +9,108 @@ interface VoiceInputButtonProps {
   languageHint?: string;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
+  label?: string;
 }
 
 type RecordingState = 'idle' | 'recording' | 'processing';
+
+// Animated bars component for recording visualization
+const AudioBars: React.FC<{ analyser: AnalyserNode | null; barCount?: number }> = ({ analyser, barCount = 24 }) => {
+  const barsRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number>(0);
+  const dataArray = useRef<Uint8Array<ArrayBuffer> | null>(null);
+
+  useEffect(() => {
+    if (!analyser) return;
+    dataArray.current = new Uint8Array(analyser.frequencyBinCount);
+
+    const draw = () => {
+      if (!analyser || !barsRef.current || !dataArray.current) return;
+      analyser.getByteFrequencyData(dataArray.current);
+
+      const bars = barsRef.current.children;
+      const step = Math.floor(dataArray.current.length / barCount);
+      for (let i = 0; i < barCount && i < bars.length; i++) {
+        const val = dataArray.current[i * step] / 255;
+        const height = Math.max(4, val * 32);
+        (bars[i] as HTMLElement).style.height = `${height}px`;
+        (bars[i] as HTMLElement).style.opacity = `${0.4 + val * 0.6}`;
+      }
+      rafRef.current = requestAnimationFrame(draw);
+    };
+
+    draw();
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [analyser, barCount]);
+
+  return (
+    <div ref={barsRef} className="flex items-center justify-center gap-[2px] h-8">
+      {Array.from({ length: barCount }).map((_, i) => (
+        <div
+          key={i}
+          className="w-[3px] rounded-full bg-[#0D92F4] transition-all"
+          style={{
+            height: '4px',
+            opacity: 0.3,
+            transitionDuration: '50ms',
+          }}
+        />
+      ))}
+    </div>
+  );
+};
 
 const VoiceInputButton: React.FC<VoiceInputButtonProps> = ({
   onTranscription,
   languageHint,
   size = 'md',
   className = '',
+  label,
 }) => {
-  const { t } = useTranslation();
   const [state, setState] = useState<RecordingState>('idle');
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const animationRef = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
 
-  const sizeClasses = {
-    sm: 'w-10 h-10',
-    md: 'w-14 h-14',
-    lg: 'w-20 h-20',
-  };
-
-  const iconSizes = { sm: 18, md: 24, lg: 32 };
+  const sizeMap = { sm: 40, md: 48, lg: 56 };
+  const iconMap = { sm: 16, md: 20, lg: 24 };
+  const btnSize = sizeMap[size];
+  const iconSize = iconMap[size];
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
-      if (mediaRecorderRef.current?.state === 'recording') {
-        mediaRecorderRef.current.stop();
-      }
+      if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
+      audioCtxRef.current?.close();
     };
-  }, []);
-
-  const drawWaveform = useCallback(() => {
-    const canvas = canvasRef.current;
-    const analyser = analyserRef.current;
-    if (!canvas || !analyser) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-    analyser.getByteTimeDomainData(dataArray);
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = '#FF9933';
-    ctx.beginPath();
-
-    const sliceWidth = canvas.width / bufferLength;
-    let x = 0;
-    for (let i = 0; i < bufferLength; i++) {
-      const v = dataArray[i] / 128.0;
-      const y = (v * canvas.height) / 2;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-      x += sliceWidth;
-    }
-    ctx.lineTo(canvas.width, canvas.height / 2);
-    ctx.stroke();
-
-    animationRef.current = requestAnimationFrame(drawWaveform);
   }, []);
 
   const startRecording = async () => {
     setError(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, sampleRate: 16000 },
+      });
 
-      // Set up audio analyser for waveform
       const audioCtx = new AudioContext();
+      audioCtxRef.current = audioCtx;
       const source = audioCtx.createMediaStreamSource(stream);
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
-      source.connect(analyser);
-      analyserRef.current = analyser;
+      const node = audioCtx.createAnalyser();
+      node.fftSize = 128;
+      node.smoothingTimeConstant = 0.8;
+      source.connect(node);
+      setAnalyser(node);
 
       const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4',
+        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus'
+          : MediaRecorder.isTypeSupported('audio/webm')
+          ? 'audio/webm'
+          : 'audio/mp4',
       });
       chunksRef.current = [];
 
@@ -105,35 +120,42 @@ const VoiceInputButton: React.FC<VoiceInputButtonProps> = ({
 
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        if (animationRef.current) cancelAnimationFrame(animationRef.current);
+        setAnalyser(null);
+        audioCtx.close();
 
         const blob = new Blob(chunksRef.current, { type: mediaRecorder.mimeType });
         if (blob.size === 0) {
           setState('idle');
-          setError('No audio recorded');
+          setError('No audio captured');
           return;
         }
 
         setState('processing');
         try {
-          const formData = new FormData();
-          formData.append('audio', blob, 'recording.webm');
-          if (languageHint) formData.append('language_hint', languageHint);
+          const fd = new FormData();
+          fd.append('audio', blob, 'recording.webm');
+          if (languageHint) fd.append('language_hint', languageHint);
 
           const response = await fetch(`${API_BASE_URL}/api/v1/nyayavaani/transcribe`, {
             method: 'POST',
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem('token')}`,
-            },
-            body: formData,
+            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+            body: fd,
           });
 
-          if (!response.ok) throw new Error('Transcription failed');
+          if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.detail || `Server error ${response.status}`);
+          }
+
           const data = await response.json();
-          onTranscription(data.text, data.language);
-        } catch (err) {
+          if (data.text?.trim()) {
+            onTranscription(data.text.trim(), data.language || 'auto');
+          } else {
+            setError('Could not detect speech. Try again.');
+          }
+        } catch (err: any) {
           console.error('Transcription error:', err);
-          setError('Failed to transcribe audio');
+          setError(err.message || 'Transcription failed');
         }
         setState('idle');
         setDuration(0);
@@ -142,95 +164,142 @@ const VoiceInputButton: React.FC<VoiceInputButtonProps> = ({
       mediaRecorderRef.current = mediaRecorder;
       mediaRecorder.start(250);
       setState('recording');
-
-      // Timer
       setDuration(0);
       timerRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
-
-      // Start waveform
-      drawWaveform();
-    } catch (err) {
-      console.error('Microphone access error:', err);
-      setError('Microphone access denied');
+    } catch (err: any) {
+      console.error('Mic error:', err);
+      setError(err.name === 'NotAllowedError' ? 'Microphone access denied. Please allow mic access.' : 'Microphone unavailable');
     }
   };
 
-  const stopRecording = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    if (mediaRecorderRef.current?.state === 'recording') {
-      mediaRecorderRef.current.stop();
-    }
-  };
+  const stopRecording = useCallback(() => {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    if (mediaRecorderRef.current?.state === 'recording') mediaRecorderRef.current.stop();
+  }, []);
 
-  const formatDuration = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+  // Auto-stop at 60 seconds
+  useEffect(() => {
+    if (state === 'recording' && duration >= 60) stopRecording();
+  }, [state, duration, stopRecording]);
+
+  const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+
+  const isRecording = state === 'recording';
+  const isProcessing = state === 'processing';
 
   return (
-    <div className={`flex flex-col items-center gap-2 ${className}`}>
-      <motion.button
-        onClick={state === 'recording' ? stopRecording : startRecording}
-        disabled={state === 'processing'}
-        className={`${sizeClasses[size]} rounded-full flex items-center justify-center transition-all shadow-lg ${
-          state === 'recording'
-            ? 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/30'
-            : state === 'processing'
-            ? 'bg-gray-400 cursor-not-allowed text-white'
-            : 'bg-gradient-to-br from-saffron-500 to-orange-500 hover:from-saffron-600 hover:to-orange-600 text-white shadow-saffron'
-        }`}
-        whileTap={state !== 'processing' ? { scale: 0.9 } : undefined}
-        animate={state === 'recording' ? { scale: [1, 1.1, 1] } : {}}
-        transition={state === 'recording' ? { repeat: Infinity, duration: 1.5 } : {}}
-      >
-        {state === 'processing' ? (
-          <Loader2 size={iconSizes[size]} className="animate-spin" />
-        ) : state === 'recording' ? (
-          <MicOff size={iconSizes[size]} />
-        ) : (
-          <Mic size={iconSizes[size]} />
-        )}
-      </motion.button>
+    <div className={`flex flex-col items-center ${className}`}>
+      {/* Main button */}
+      <div className="relative">
+        {/* Pulse rings when recording */}
+        <AnimatePresence>
+          {isRecording && (
+            <>
+              <motion.div
+                className="absolute inset-0 rounded-full border-2 border-[#F95454]/30"
+                initial={{ scale: 1, opacity: 0.6 }}
+                animate={{ scale: 2.2, opacity: 0 }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: 'easeOut' }}
+              />
+              <motion.div
+                className="absolute inset-0 rounded-full border border-[#F95454]/20"
+                initial={{ scale: 1, opacity: 0.4 }}
+                animate={{ scale: 1.8, opacity: 0 }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: 'easeOut', delay: 0.3 }}
+              />
+            </>
+          )}
+        </AnimatePresence>
 
+        <motion.button
+          onClick={isRecording ? stopRecording : startRecording}
+          disabled={isProcessing}
+          className={`relative z-10 rounded-full flex items-center justify-center transition-all ${
+            isRecording
+              ? 'bg-[#F95454] shadow-lg shadow-[#F95454]/30 hover:bg-[#E04040]'
+              : isProcessing
+              ? 'bg-slate-600 cursor-wait'
+              : 'bg-gradient-to-br from-[#0D92F4] to-[#0B7DD4] shadow-lg shadow-[#0D92F4]/20 hover:shadow-[#0D92F4]/40 hover:scale-105'
+          }`}
+          style={{ width: btnSize, height: btnSize }}
+          whileTap={!isProcessing ? { scale: 0.9 } : undefined}
+          transition={{ type: 'spring', stiffness: 400, damping: 15 }}
+        >
+          {isProcessing ? (
+            <Loader2 size={iconSize} className="text-white animate-spin" />
+          ) : isRecording ? (
+            <Square size={iconSize - 4} className="text-white" fill="white" />
+          ) : (
+            <Mic size={iconSize} className="text-white" />
+          )}
+        </motion.button>
+      </div>
+
+      {/* Recording state UI */}
+      <AnimatePresence mode="wait">
+        {isRecording && (
+          <motion.div
+            key="recording"
+            initial={{ opacity: 0, y: -8, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: 'auto' }}
+            exit={{ opacity: 0, y: -8, height: 0 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            className="flex flex-col items-center gap-2 mt-3 overflow-hidden"
+          >
+            <AudioBars analyser={analyser} barCount={size === 'sm' ? 16 : 24} />
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-[#F95454] animate-pulse" />
+              <span className="text-xs font-mono text-[#F95454] tabular-nums">{fmt(duration)}</span>
+            </div>
+            <span className="text-[10px] text-slate-500">Tap to stop · Max 60s</span>
+          </motion.div>
+        )}
+
+        {isProcessing && (
+          <motion.div
+            key="processing"
+            initial={{ opacity: 0, y: -5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="mt-3 flex items-center gap-2"
+          >
+            <div className="flex gap-1">
+              {[0, 1, 2].map((i) => (
+                <motion.div key={i} className="w-1.5 h-1.5 rounded-full bg-[#0D92F4]"
+                  animate={{ opacity: [0.3, 1, 0.3] }}
+                  transition={{ duration: 1, repeat: Infinity, delay: i * 0.15 }}
+                />
+              ))}
+            </div>
+            <span className="text-xs text-[#77CDFF]">Transcribing...</span>
+          </motion.div>
+        )}
+
+        {state === 'idle' && !error && (
+          <motion.span
+            key="idle"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="mt-2 text-[10px] text-slate-500"
+          >
+            {label || 'Tap to speak'}
+          </motion.span>
+        )}
+      </AnimatePresence>
+
+      {/* Error */}
       <AnimatePresence>
-        {state === 'recording' && (
+        {error && (
           <motion.div
             initial={{ opacity: 0, y: -5 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="flex flex-col items-center gap-1"
+            className="mt-2 px-3 py-1.5 rounded-lg bg-[#F95454]/10 border border-[#F95454]/20"
           >
-            <canvas
-              ref={canvasRef}
-              width={120}
-              height={30}
-              className="rounded"
-            />
-            <span className="text-xs font-mono text-red-500">
-              {formatDuration(duration)}
-            </span>
-            <span className="text-[10px] text-gray-500">
-              {t('nyayavaani.stopRecording')}
-            </span>
+            <span className="text-[11px] text-[#F95454]">{error}</span>
           </motion.div>
         )}
-        {state === 'processing' && (
-          <motion.span
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-xs text-saffron-600"
-          >
-            {t('nyayavaani.processing')}
-          </motion.span>
-        )}
-        {state === 'idle' && !error && (
-          <span className="text-[10px] text-gray-400">{t('nyayavaani.tapToSpeak')}</span>
-        )}
       </AnimatePresence>
-
-      {error && (
-        <span className="text-xs text-red-500">{error}</span>
-      )}
     </div>
   );
 };

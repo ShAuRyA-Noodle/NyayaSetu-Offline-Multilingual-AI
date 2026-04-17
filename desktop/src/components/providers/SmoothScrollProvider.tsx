@@ -45,13 +45,12 @@ function ScrollTracker({ children }: { children: ReactNode }) {
       scrollProgress: progress,
     };
 
-    // Throttle React state updates to ~100ms to avoid re-rendering entire tree every frame
+    // Throttle to ~60ms for smooth state without excess re-renders
     const now = performance.now();
-    if (now - lastUpdate.current > 100) {
+    if (now - lastUpdate.current > 60) {
       lastUpdate.current = now;
       setScrollData(data);
     } else {
-      // Schedule a trailing update so final position is always correct
       pendingData.current = data;
       cancelAnimationFrame(rafId.current);
       rafId.current = requestAnimationFrame(() => {
@@ -76,25 +75,18 @@ function ScrollTracker({ children }: { children: ReactNode }) {
 }
 
 export default function SmoothScrollProvider({ children }: SmoothScrollProviderProps) {
-  // Check for reduced motion preference
   const reduceMotion = typeof window !== 'undefined'
     ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
     : false;
 
-  // Register GSAP ScrollTrigger proxy when Lenis instance is available
   const lenisSetup = useCallback(async () => {
     try {
       const { gsap } = await import('gsap');
       const { ScrollTrigger } = await import('gsap/ScrollTrigger');
       gsap.registerPlugin(ScrollTrigger);
-
-      // ScrollTrigger will sync with Lenis via the RAF loop
-      ScrollTrigger.defaults({
-        scroller: window,
-      });
+      ScrollTrigger.defaults({ scroller: window });
     } catch {
-      // GSAP not available, degrade gracefully
-      console.debug('[NyayaSetu] GSAP ScrollTrigger not available, scroll animations will use CSS fallback');
+      console.debug('[NyayaSetu] GSAP ScrollTrigger not available');
     }
   }, []);
 
@@ -103,7 +95,6 @@ export default function SmoothScrollProvider({ children }: SmoothScrollProviderP
   }, [lenisSetup]);
 
   if (reduceMotion) {
-    // Skip smooth scrolling for users who prefer reduced motion
     return <ScrollTracker>{children}</ScrollTracker>;
   }
 
@@ -111,12 +102,13 @@ export default function SmoothScrollProvider({ children }: SmoothScrollProviderP
     <ReactLenis
       root
       options={{
-        lerp: 0.08,
-        duration: 0.8,
+        lerp: 0.12,          // Buttery smooth — Apple-like (0.08 was too sluggish)
+        duration: 1.2,        // Longer coast for that premium feel
         smoothWheel: true,
-        wheelMultiplier: 1.0,
-        touchMultiplier: 1.2,
-        syncTouch: false,
+        wheelMultiplier: 0.8, // Slower per-tick = more glide
+        touchMultiplier: 1.5,
+        syncTouch: true,      // Smooth touch scrolling too (mobile)
+        syncTouchLerp: 0.06,  // Extra smooth on touch
       }}
     >
       <ScrollTracker>{children}</ScrollTracker>

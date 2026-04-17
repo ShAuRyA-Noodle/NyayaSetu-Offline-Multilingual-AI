@@ -18,11 +18,13 @@ logger = logging.getLogger(__name__)
 MIGRATIONS_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def _ensure_migrations_table(conn: sqlite3.Connection):
-    """Create migrations tracking table if it doesn't exist."""
-    conn.execute("""
+def _ensure_migrations_table(conn):
+    """Create migrations tracking table if it doesn't exist (dialect-aware)."""
+    from .. import db_adapter
+    id_type = "SERIAL PRIMARY KEY" if db_adapter.IS_POSTGRES else "INTEGER PRIMARY KEY AUTOINCREMENT"
+    conn.execute(f"""
         CREATE TABLE IF NOT EXISTS _migrations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id {id_type},
             name TEXT UNIQUE NOT NULL,
             applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -80,6 +82,26 @@ def apply_migration(name: str, filepath: str):
 
 def run_all_pending():
     """Apply all pending migrations in order."""
+    # In Postgres mode, postgres_schema.sql already contains every column and table
+    # that the migration files would add. Skip legacy migrations (they use PRAGMA
+    # table_info which is SQLite-only). Mark them as applied for bookkeeping.
+    from .. import db_adapter
+    if db_adapter.IS_POSTGRES:
+        logger.info("Postgres backend detected - marking legacy migrations as applied (schema already current)")
+        with get_db() as conn:
+            _ensure_migrations_table(conn)
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM _migrations")
+            applied = {row[0] for row in cursor.fetchall()}
+            all_migrations = [name for name, _ in [
+                (f[:-3], None) for f in sorted(os.listdir(MIGRATIONS_DIR))
+                if not f.startswith("__") and f.endswith(".py") and f != "runner.py"
+            ]]
+            for name in all_migrations:
+                if name not in applied:
+                    cursor.execute("INSERT INTO _migrations (name) VALUES (?)", (name,))
+        return 0
+
     pending = get_pending_migrations()
 
     if not pending:

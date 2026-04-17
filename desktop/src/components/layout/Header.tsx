@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { WifiOff, Moon, Sun, Bell, Menu } from 'lucide-react';
+import { WifiOff, Bell, Menu } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useScrollContext } from '../providers/SmoothScrollProvider';
 import apiService from '../../services/api';
@@ -14,7 +13,6 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ isOnline, onMenuClick }) => {
-  const { darkMode, toggleDarkMode } = useTheme();
   const { user } = useAuth();
   const { t } = useTranslation();
   const { scrollY } = useScrollContext();
@@ -25,7 +23,6 @@ const Header: React.FC<HeaderProps> = ({ isOnline, onMenuClick }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const [bellShake, setBellShake] = useState(false);
 
-  // Simple scroll state — no per-frame blur computation
   const scrolled = scrollY > 20;
 
   useEffect(() => {
@@ -34,7 +31,6 @@ const Header: React.FC<HeaderProps> = ({ isOnline, onMenuClick }) => {
     return () => clearInterval(interval);
   }, []);
 
-  // Bell shake animation on new notification
   useEffect(() => {
     if (unreadCount > prevUnread && prevUnread >= 0) {
       setBellShake(true);
@@ -79,43 +75,47 @@ const Header: React.FC<HeaderProps> = ({ isOnline, onMenuClick }) => {
     } catch { /* ignore */ }
   };
 
+  const iconBtnClass =
+    'p-2 rounded-xl transition-all duration-200 border border-transparent hover:border-white/[0.06] hover:bg-white/[0.04]';
+
   return (
     <header
-      className={`village-panel border-b border-mitti-200/20 dark:border-night-border/40 px-4 md:px-6 py-3 sticky top-0 z-30 transition-shadow duration-300 ${scrolled ? 'header-scrolled' : ''}`}
+      className={`sticky top-0 z-30 px-4 md:px-6 py-2.5 transition-all duration-300 ${
+        scrolled
+          ? 'glass-surface-strong border-b border-white/[0.04] shadow-lg shadow-black/10'
+          : 'bg-transparent border-b border-transparent'
+      }`}
     >
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
+        {/* Left side */}
+        <div className="flex items-center gap-3">
           <motion.button
             onClick={onMenuClick}
-            className="lg:hidden p-2 rounded-xl hover:bg-mitti-100/50 dark:hover:bg-night-card/50"
+            className={`lg:hidden ${iconBtnClass}`}
             whileTap={{ scale: 0.92 }}
             aria-label="Toggle menu"
           >
-            <Menu className="w-5 h-5 text-mitti-500 dark:text-mitti-400" />
+            <Menu className="w-5 h-5 text-kora-300/70" />
           </motion.button>
 
-          {/* Connection status — breathing dot or flash */}
-          <div className="flex items-center space-x-2">
+          {/* Status dot */}
+          <div className="flex items-center gap-2">
             {isOnline ? (
               <>
-                <motion.div
-                  className="w-2 h-2 bg-mitti-500 rounded-full"
-                  animate={{ scale: [1, 1.3, 1], opacity: [0.7, 1, 0.7] }}
-                  transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
-                />
-                <span className="text-xs font-medium text-mitti-500 dark:text-mitti-400 hidden sm:inline">
+                <div className="relative">
+                  <div className="w-2 h-2 bg-india-green-500 rounded-full" />
+                  <div className="absolute inset-0 w-2 h-2 bg-india-green-500 rounded-full animate-ping opacity-30" />
+                </div>
+                <span className="text-[11px] font-medium text-kora-300/40 hidden sm:inline tracking-wide uppercase">
                   {t('common.online')}
                 </span>
               </>
             ) : (
               <>
-                <motion.div
-                  animate={{ opacity: [1, 0.3, 1] }}
-                  transition={{ duration: 1, repeat: Infinity }}
-                >
-                  <WifiOff className="w-4 h-4 text-red-500" />
+                <motion.div animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1, repeat: Infinity }}>
+                  <WifiOff className="w-3.5 h-3.5 text-red-500/70" />
                 </motion.div>
-                <span className="text-xs font-medium text-red-500 hidden sm:inline">
+                <span className="text-[11px] font-medium text-red-500/60 hidden sm:inline tracking-wide uppercase">
                   {t('common.offline')}
                 </span>
               </>
@@ -123,35 +123,29 @@ const Header: React.FC<HeaderProps> = ({ isOnline, onMenuClick }) => {
           </div>
         </div>
 
-        <div className="flex items-center space-x-2 md:space-x-3">
+        {/* Right side */}
+        <div className="flex items-center gap-1.5 md:gap-2">
           <LanguageToggle />
 
-          {/* Notification bell — shakes on new count */}
+          {/* Notifications */}
           <div className="relative" ref={panelRef}>
             <motion.button
               onClick={handleBellClick}
-              className="relative p-2 rounded-xl bg-kora-200/50 dark:bg-night-card/60 hover:bg-kora-200/80 dark:hover:bg-night-card/80 border border-mitti-200/20 dark:border-night-border/40 transition-colors"
+              className={`relative ${iconBtnClass}`}
               whileTap={{ scale: 0.92 }}
-              animate={bellShake ? {
-                rotate: [0, -12, 10, -8, 6, -4, 2, 0],
-              } : {}}
-              transition={bellShake ? {
-                duration: 0.5,
-                ease: [0.25, 1, 0.5, 1],
-              } : {
-                duration: 0.15,
-              }}
+              animate={bellShake ? { rotate: [0, -12, 10, -8, 6, -4, 2, 0] } : {}}
+              transition={bellShake ? { duration: 0.5 } : { duration: 0.15 }}
               aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
             >
-              <Bell className="w-5 h-5 text-mitti-500 dark:text-mitti-400" strokeWidth={1.8} />
+              <Bell className="w-[18px] h-[18px] text-kora-300/60" strokeWidth={1.8} />
               <AnimatePresence>
                 {unreadCount > 0 && (
                   <motion.span
-                    initial={{ scale: 0, y: 5 }}
-                    animate={{ scale: 1, y: 0 }}
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
                     exit={{ scale: 0 }}
                     transition={{ type: 'spring', stiffness: 500, damping: 20 }}
-                    className="absolute -top-1 -right-1 w-5 h-5 bg-mitti-500 text-white text-xs rounded-full flex items-center justify-center font-bold shadow-mitti tabular-nums"
+                    className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-[#0D92F4] text-white text-[10px] rounded-full flex items-center justify-center font-bold shadow-lg shadow-[#0D92F4]/30 tabular-nums"
                   >
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </motion.span>
@@ -167,40 +161,35 @@ const Header: React.FC<HeaderProps> = ({ isOnline, onMenuClick }) => {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -8, scale: 0.96 }}
                   transition={{ type: 'spring', damping: 22, stiffness: 300 }}
-                  className="absolute right-0 mt-2 w-80 village-card z-50 max-h-96 overflow-hidden"
-                  style={{ boxShadow: 'var(--shadow-overlay)' }}
+                  className="absolute right-0 mt-2 w-80 rounded-xl overflow-hidden glass-surface-strong z-50"
+                  style={{ boxShadow: '0 16px 48px rgba(0,0,0,0.4)' }}
                 >
-                  <div className="flex items-center justify-between p-3 border-b border-mitti-200/20 dark:border-night-border/40">
-                    <h3 className="font-semibold text-mitti-900 dark:text-kora-200 text-sm">{t('header.notifications')}</h3>
+                  <div className="flex items-center justify-between p-3 border-b border-white/[0.04]">
+                    <h3 className="font-semibold text-kora-200 text-sm">{t('header.notifications')}</h3>
                     {unreadCount > 0 && (
-                      <button
-                        onClick={handleMarkAllRead}
-                        className="text-xs text-mitti-500 hover:text-mitti-600 font-medium transition-colors"
-                      >
+                      <button onClick={handleMarkAllRead}
+                        className="text-xs text-slate-400/60 hover:text-[#77CDFF] font-medium transition-colors">
                         {t('header.markAllRead')}
                       </button>
                     )}
                   </div>
                   <div className="max-h-72 overflow-y-auto" data-lenis-prevent>
                     {notifications.length === 0 ? (
-                      <div className="p-6 text-center">
-                        <Bell className="w-8 h-8 text-mitti-300 dark:text-night-muted mx-auto mb-2 opacity-50" />
-                        <p className="text-sm text-mitti-400 dark:text-night-muted">
-                          {t('header.noNotifications')}
-                        </p>
+                      <div className="p-8 text-center">
+                        <Bell className="w-6 h-6 text-[#0D92F4]/20 mx-auto mb-2" />
+                        <p className="text-xs text-slate-400/40">{t('header.noNotifications')}</p>
                       </div>
                     ) : (
                       notifications.map((n: any, i: number) => (
-                        <motion.div
-                          key={n.id}
+                        <motion.div key={n.id}
                           initial={{ opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: i * 0.03, duration: 0.25, ease: [0.25, 1, 0.5, 1] }}
-                          className="p-3 border-b border-mitti-100/20 dark:border-night-border/20 hover:bg-mitti-50/50 dark:hover:bg-night-card/50 transition-colors"
+                          transition={{ delay: i * 0.03, duration: 0.25 }}
+                          className="p-3 border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors"
                         >
-                          <p className="text-xs font-medium text-mitti-900 dark:text-kora-200">{n.subject}</p>
-                          <p className="text-xs text-mitti-500 dark:text-night-muted mt-0.5 line-clamp-2">{n.message}</p>
-                          <p className="text-xs text-mitti-400 mt-1 tabular-nums">{new Date(n.created_at).toLocaleString()}</p>
+                          <p className="text-xs font-medium text-kora-200">{n.subject}</p>
+                          <p className="text-xs text-slate-400/50 mt-0.5 line-clamp-2">{n.message}</p>
+                          <p className="text-[10px] text-slate-500/30 mt-1 tabular-nums">{new Date(n.created_at).toLocaleString()}</p>
                         </motion.div>
                       ))
                     )}
@@ -210,48 +199,19 @@ const Header: React.FC<HeaderProps> = ({ isOnline, onMenuClick }) => {
             </AnimatePresence>
           </div>
 
-          {/* Dark mode toggle — sun/moon morph with rotation */}
-          <motion.button
-            onClick={toggleDarkMode}
-            className="p-2 rounded-xl bg-kora-200/50 dark:bg-night-card/60 hover:bg-kora-200/80 dark:hover:bg-night-card/80 border border-mitti-200/20 dark:border-night-border/40 transition-colors"
-            whileTap={{ scale: 0.92 }}
-            aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            <AnimatePresence mode="wait" initial={false}>
-              {darkMode ? (
-                <motion.div
-                  key="sun"
-                  initial={{ rotate: -90, scale: 0, opacity: 0 }}
-                  animate={{ rotate: 0, scale: 1, opacity: 1 }}
-                  exit={{ rotate: 90, scale: 0, opacity: 0 }}
-                  transition={{ duration: 0.25, ease: [0.25, 1, 0.5, 1] }}
-                >
-                  <Sun className="w-5 h-5 text-haldi-400" />
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="moon"
-                  initial={{ rotate: 90, scale: 0, opacity: 0 }}
-                  animate={{ rotate: 0, scale: 1, opacity: 1 }}
-                  exit={{ rotate: -90, scale: 0, opacity: 0 }}
-                  transition={{ duration: 0.25, ease: [0.25, 1, 0.5, 1] }}
-                >
-                  <Moon className="w-5 h-5 text-mitti-500" />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.button>
-
           {/* User avatar */}
-          <div className="hidden md:flex items-center space-x-2 pl-3 border-l border-mitti-200/20 dark:border-night-border/40">
+          <div className="hidden md:flex items-center gap-2.5 pl-3 ml-1 border-l border-white/[0.06]">
             <motion.div
-              className="w-8 h-8 bg-gradient-to-br from-mitti-500 to-haldi-500 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-mitti"
-              whileHover={{ scale: 1.1 }}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold relative overflow-hidden"
+              whileHover={{ scale: 1.08 }}
               transition={{ type: 'spring', stiffness: 400, damping: 15 }}
             >
-              {user?.username?.charAt(0).toUpperCase() || 'U'}
+              <div className="absolute inset-0 bg-gradient-to-br from-[#0D92F4] to-[#77CDFF]" />
+              <span className="relative text-white">
+                {user?.username?.charAt(0).toUpperCase() || 'U'}
+              </span>
             </motion.div>
-            <span className="text-sm font-medium text-mitti-700 dark:text-kora-200">{user?.username}</span>
+            <span className="text-sm font-medium text-kora-200/70">{user?.username}</span>
           </div>
         </div>
       </div>

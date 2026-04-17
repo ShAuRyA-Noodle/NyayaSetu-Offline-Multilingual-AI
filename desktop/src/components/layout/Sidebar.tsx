@@ -7,33 +7,19 @@ import {
   Settings, LogOut, Building2, ScrollText, Shield, X,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import AshokaChakra from '../decorative/AshokaChakra';
 
 interface SidebarProps {
   onClose?: () => void;
 }
 
-// Stagger animation for menu items
 const containerVariants = {
   hidden: {},
-  visible: {
-    transition: {
-      staggerChildren: 0.03,
-      delayChildren: 0.1,
-    },
-  },
+  visible: { transition: { staggerChildren: 0.04, delayChildren: 0.15 } },
 };
 
 const itemVariants = {
-  hidden: { opacity: 0, x: -12 },
-  visible: {
-    opacity: 1,
-    x: 0,
-    transition: {
-      duration: 0.35,
-      ease: [0.25, 1, 0.5, 1] as const,
-    },
-  },
+  hidden: { opacity: 0, x: -10 },
+  visible: { opacity: 1, x: 0, transition: { duration: 0.3, ease: [0.25, 1, 0.5, 1] as const } },
 };
 
 const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
@@ -57,43 +43,39 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   const menuItems = allMenuItems.filter(item => item.roles.includes(role));
 
   return (
-    <div className="w-64 village-panel flex flex-col h-screen">
-      {/* Logo — with warm glow in dark mode */}
-      <div className="p-5 border-b border-mitti-200/20 dark:border-night-border/40">
+    <div className="w-64 h-screen flex flex-col glass-surface-strong border-r border-white/[0.04]">
+      {/* ─── Logo ─── */}
+      <div className="p-5 border-b border-white/[0.04]">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-3">
+            {/* Logo mark */}
             <motion.div
-              className="relative"
-              whileHover={{ scale: 1.08 }}
+              className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#0D92F4] to-[#77CDFF] flex items-center justify-center shadow-lg shadow-[#0D92F4]/20"
+              whileHover={{ scale: 1.08, rotate: 2 }}
               transition={{ type: 'spring', stiffness: 400, damping: 15 }}
             >
-              <AshokaChakra size={36} spinning />
-              {/* Glow ring behind chakra */}
-              <div className="absolute inset-0 rounded-full opacity-0 dark:opacity-30"
-                   style={{ boxShadow: '0 0 12px rgba(194, 123, 58, 0.4)' }} />
+              <span className="text-white font-display font-bold text-sm">N</span>
             </motion.div>
             <div>
-              <h1 className="text-xl font-display font-bold text-gradient-mitti">
-                {t('common.appName')}
+              <h1 className="text-base font-display font-bold text-kora-100 tracking-tight">
+                NyayaSetu
               </h1>
-              <p className="text-[10px] font-devanagari text-mitti-400 dark:text-mitti-500 tracking-wide">
-                {t('sidebar.governancePlatform')}
+              <p className="text-[10px] text-slate-400/40 font-medium tracking-wider uppercase">
+                Governance
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="lg:hidden p-1.5 rounded-lg hover:bg-mitti-100/50 dark:hover:bg-night-card transition-colors"
-            aria-label="Close sidebar"
-          >
-            <X className="w-5 h-5 text-mitti-400" />
+          <button onClick={onClose}
+            className="lg:hidden p-1.5 rounded-lg hover:bg-white/[0.04] transition-colors"
+            aria-label="Close sidebar">
+            <X className="w-4 h-4 text-slate-400/50" />
           </button>
         </div>
       </div>
 
-      {/* Menu Items — staggered entrance */}
+      {/* ─── Navigation ─── */}
       <motion.nav
-        className="flex-1 p-3 space-y-1 overflow-y-auto"
+        className="flex-1 p-3 space-y-0.5 overflow-y-auto"
         data-lenis-prevent
         variants={containerVariants}
         initial="hidden"
@@ -107,43 +89,43 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
             <motion.div key={item.path} variants={itemVariants}>
               <Link to={item.path} onClick={onClose} className="relative block group">
                 <motion.div
-                  className={`flex items-center space-x-3 px-4 py-2.5 rounded-xl text-sm relative z-10 ${
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] relative z-10 transition-colors duration-200 ${
                     isActive
                       ? 'text-white font-semibold'
-                      : 'text-mitti-700 dark:text-mitti-300'
+                      : 'text-kora-300/50 hover:text-kora-300/80'
                   }`}
-                  whileHover={{ x: isActive ? 0 : 4 }}
-                  transition={{ duration: 0.15, ease: [0.25, 1, 0.5, 1] }}
+                  whileHover={{ x: isActive ? 0 : 3 }}
+                  transition={{ duration: 0.15 }}
                 >
-                  {/* Active background indicator — shared spring animation */}
+                  {/* Active indicator */}
                   {isActive && (
                     <motion.div
                       layoutId="sidebar-active"
                       className="absolute inset-0 rounded-xl"
                       style={{
-                        background: 'linear-gradient(135deg, #C27B3A, #A66228)',
-                        boxShadow: '0 4px 16px rgba(194, 123, 58, 0.25), 0 0 20px rgba(194, 123, 58, 0.1)',
+                        background: 'linear-gradient(135deg, rgba(13, 146, 244, 0.15), rgba(13, 146, 244, 0.08))',
+                        border: '1px solid rgba(13, 146, 244, 0.15)',
                       }}
                       transition={{ type: 'spring', stiffness: 350, damping: 28 }}
                     />
                   )}
 
-                  {/* Hover background for non-active items */}
+                  {/* Hover bg */}
                   {!isActive && (
-                    <div className="absolute inset-0 rounded-xl bg-mitti-100/0 dark:bg-night-card/0 group-hover:bg-mitti-100/50 dark:group-hover:bg-night-card/50 transition-colors duration-200" />
+                    <div className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white/[0.03]" />
                   )}
 
-                  {/* Icon with hover scale effect */}
-                  <motion.div
-                    className="relative z-10"
-                    whileHover={{ scale: 1.12 }}
-                    transition={{ type: 'spring', stiffness: 400, damping: 15 }}
-                  >
-                    <Icon className="w-5 h-5" strokeWidth={1.8} />
-                  </motion.div>
+                  {/* Active accent line */}
+                  {isActive && (
+                    <motion.div
+                      layoutId="sidebar-accent-line"
+                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full bg-[#0D92F4]"
+                      transition={{ type: 'spring', stiffness: 350, damping: 28 }}
+                    />
+                  )}
 
-                  {/* Label with line-reveal effect on hover */}
-                  <span className="relative z-10 line-reveal">{t(item.labelKey)}</span>
+                  <Icon className={`relative z-10 w-[18px] h-[18px] flex-shrink-0 ${isActive ? 'text-[#77CDFF]' : ''}`} strokeWidth={1.8} />
+                  <span className="relative z-10">{t(item.labelKey)}</span>
                 </motion.div>
               </Link>
             </motion.div>
@@ -151,58 +133,34 @@ const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
         })}
       </motion.nav>
 
-      {/* Kolam divider — animated entrance */}
-      <motion.div
-        className="mx-4"
-        initial={{ scaleX: 0 }}
-        animate={{ scaleX: 1 }}
-        transition={{ delay: 0.4, duration: 0.5, ease: [0.25, 1, 0.5, 1] }}
-      >
-        <div className="kolam-divider" />
-      </motion.div>
+      {/* ─── Divider ─── */}
+      <div className="mx-4">
+        <div className="h-[1px] bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
+      </div>
 
-      {/* User Profile & Logout */}
-      <motion.div
-        className="p-4"
+      {/* ─── User & Logout ─── */}
+      <motion.div className="p-4"
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.35, duration: 0.4, ease: [0.25, 1, 0.5, 1] }}
-      >
-        <div className="flex items-center mb-3 group">
-          {/* Avatar with gradient ring animation on hover */}
-          <motion.div
-            className="relative"
-            whileHover={{ scale: 1.08 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 15 }}
-          >
-            <div className="w-10 h-10 bg-gradient-to-br from-mitti-500 to-haldi-500 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-mitti">
-              {user?.username?.charAt(0).toUpperCase() || 'U'}
-            </div>
-            {/* Glow ring on hover */}
-            <div
-              className="absolute -inset-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-              style={{
-                background: 'conic-gradient(from 0deg, #C27B3A, #F59E0B, #D49A5E, #C27B3A)',
-                mask: 'radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px))',
-                WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px))',
-                zIndex: -1,
-              }}
-            />
-          </motion.div>
-          <div className="ml-3 min-w-0">
-            <p className="font-semibold text-mitti-900 dark:text-kora-200 text-sm truncate">{user?.username}</p>
-            <p className="text-xs text-mitti-500 dark:text-mitti-400 capitalize font-medium">{user?.role}</p>
+        transition={{ delay: 0.4, duration: 0.4 }}>
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold relative overflow-hidden flex-shrink-0">
+            <div className="absolute inset-0 bg-gradient-to-br from-[#0D92F4] to-[#77CDFF]" />
+            <span className="relative text-white">{user?.username?.charAt(0).toUpperCase() || 'U'}</span>
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-kora-200 text-sm truncate">{user?.username}</p>
+            <p className="text-[11px] text-slate-400/40 capitalize font-medium">{user?.role}</p>
           </div>
         </div>
         <motion.button
           onClick={logout}
-          className="w-full flex items-center px-4 py-2 text-red-500 hover:bg-red-500/10 rounded-xl text-sm font-medium"
-          whileHover={{ x: 4 }}
+          className="w-full flex items-center gap-2.5 px-3 py-2 text-red-400/60 hover:text-red-400 hover:bg-red-500/[0.06] rounded-xl text-[13px] font-medium transition-colors"
+          whileHover={{ x: 3 }}
           whileTap={{ scale: 0.97 }}
-          transition={{ duration: 0.15, ease: [0.25, 1, 0.5, 1] }}
           aria-label="Logout"
         >
-          <LogOut className="w-4 h-4 mr-3" />
+          <LogOut className="w-4 h-4" />
           {t('common.logout')}
         </motion.button>
       </motion.div>

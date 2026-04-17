@@ -259,10 +259,10 @@ const DepartmentDashboard: React.FC = () => {
         <div className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="mb-6">
-            <h1 className="text-3xl font-bold font-display text-mitti-900 dark:text-kora-100 mb-2">
+            <h1 className="text-2xl md:text-3xl font-bold font-display text-kora-100 tracking-tight mb-2">
               {t('departmentDashboard.title', 'Department Dashboard')} - {department.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
             </h1>
-            <p className="text-mitti-600 dark:text-mitti-400">{t('departmentDashboard.filterByStatus', 'Manage and resolve citizen grievances')}</p>
+            <p className="text-sm text-mitti-500/40">{t('departmentDashboard.filterByStatus', 'Manage and resolve citizen grievances')}</p>
           </div>
 
           {/* Stats Cards */}
@@ -279,7 +279,7 @@ const DepartmentDashboard: React.FC = () => {
                 <div className="flex items-center space-x-3">
                   <div className={`p-2 ${card.iconBg} rounded-lg`}>{card.icon}</div>
                   <div>
-                    <p className="text-2xl font-bold font-display text-mitti-900 dark:text-kora-100">{card.value}</p>
+                    <p className="text-2xl font-bold font-display text-kora-100">{card.value}</p>
                     <p className="text-xs text-mitti-500 dark:text-mitti-400">{card.label}</p>
                   </div>
                 </div>
@@ -290,7 +290,7 @@ const DepartmentDashboard: React.FC = () => {
           {/* Category Chart */}
           {categoryData.length > 0 && (
             <div className="village-card rounded-xl p-6 mb-6">
-              <h2 className="text-lg font-semibold text-mitti-900 dark:text-kora-100 mb-4">Grievances by Category</h2>
+              <h2 className="text-lg font-semibold text-kora-100 mb-4">Grievances by Category</h2>
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={categoryData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -372,7 +372,7 @@ const DepartmentDashboard: React.FC = () => {
                             </span>
                           </div>
 
-                          <h3 className="text-xl font-bold text-mitti-900 dark:text-kora-100 mb-2">{grievance.title}</h3>
+                          <h3 className="text-xl font-bold text-kora-100 mb-2">{grievance.title}</h3>
                           <p className="text-mitti-700 dark:text-mitti-300 mb-4">{grievance.description}</p>
 
                           <div className="flex flex-wrap gap-4 text-sm text-mitti-600 dark:text-mitti-400 mb-4">

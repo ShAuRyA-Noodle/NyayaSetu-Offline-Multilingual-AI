@@ -914,20 +914,48 @@ IMPORTANT:
     def _generate_grievance_id(self) -> str:
         """
         Generate unique grievance ID.
-        
+
         Format: GR-YYYYMMDD-XXXXX
         Example: GR-20260105-00123
-        
-        Returns:
-            Formatted grievance ID
+
+        Queries the DB for today's highest counter so the sequence survives
+        process restarts (previously counter was purely in-memory and collided
+        after any restart).
         """
         today = date.today()
         date_str = today.strftime("%Y%m%d")
-        
-        self._grievance_counter += 1
-        sequence = str(self._grievance_counter).zfill(5)
-        
-        return f"GR-{date_str}-{sequence}"
+        prefix = f"GR-{date_str}-"
+
+        # Resolve the next counter by looking at what's actually in the DB.
+        # Works for both SQLite and Postgres.
+        try:
+            from src.api.database import get_db
+            with get_db() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT grievance_id FROM grievances "
+                    "WHERE grievance_id LIKE ? "
+                    "ORDER BY grievance_id DESC LIMIT 1",
+                    (f"{prefix}%",),
+                )
+                row = cursor.fetchone()
+                if row:
+                    last_id = row[0] if not hasattr(row, "keys") else row["grievance_id"]
+                    try:
+                        last_seq = int(last_id.rsplit("-", 1)[-1])
+                    except (ValueError, IndexError):
+                        last_seq = 0
+                    next_seq = max(last_seq + 1, self._grievance_counter + 1)
+                else:
+                    next_seq = self._grievance_counter + 1
+            self._grievance_counter = next_seq
+        except Exception:
+            # If DB lookup fails, fall back to in-memory counter
+            self._grievance_counter += 1
+            next_seq = self._grievance_counter
+
+        sequence = str(next_seq).zfill(5)
+        return f"{prefix}{sequence}"
     
     def _prepare_context(self, context_chunks: list) -> str:
         """

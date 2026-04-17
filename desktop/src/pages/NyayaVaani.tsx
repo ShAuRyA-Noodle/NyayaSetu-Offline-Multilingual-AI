@@ -83,8 +83,8 @@ const NyayaVaani: React.FC = () => {
               <Radio className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold font-display text-mitti-900 dark:text-kora-100">{t('nyayavaani.title')}</h1>
-              <p className="text-sm text-mitti-500 dark:text-mitti-400">{t('nyayavaani.subtitle')}</p>
+              <h1 className="text-2xl md:text-3xl font-bold font-display text-kora-100 tracking-tight">{t('nyayavaani.title')}</h1>
+              <p className="text-sm text-mitti-500/40">{t('nyayavaani.subtitle')}</p>
             </div>
             {systemStatus && (
               <span className={`ml-auto px-3 py-1 rounded-full text-xs font-medium ${
@@ -103,7 +103,7 @@ const NyayaVaani: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Volume2 className="w-5 h-5 text-mitti-500" />
-              <h2 className="text-lg font-semibold text-mitti-900 dark:text-kora-100">{t('nyayavaani.listenNotices')}</h2>
+              <h2 className="text-lg font-semibold text-kora-100">{t('nyayavaani.listenNotices')}</h2>
             </div>
             <LanguageSelector selected={noticeLanguage} onSelect={setNoticeLanguage} mode="dropdown" className="w-48" />
           </div>
@@ -120,7 +120,7 @@ const NyayaVaani: React.FC = () => {
                 <div key={notice.notice_id} className="bg-mitti-50/50 dark:bg-night-card/50 rounded-xl p-4 border border-mitti-200/20 dark:border-night-border/20">
                   <div className="flex items-start justify-between mb-2">
                     <div>
-                      <h3 className="font-medium text-mitti-900 dark:text-kora-100 text-sm">{notice.subject}</h3>
+                      <h3 className="font-medium text-kora-200 text-sm">{notice.subject}</h3>
                       <p className="text-xs text-mitti-500 mt-0.5">{notice.scheme_name} &middot; {notice.published_at?.split('T')[0]}</p>
                     </div>
                     <span className="text-xs px-2 py-0.5 rounded-full bg-mitti-100 text-mitti-700 dark:bg-mitti-900/30 dark:text-mitti-400">
@@ -144,7 +144,7 @@ const NyayaVaani: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <BookOpen className="w-5 h-5 text-mitti-500" />
-              <h2 className="text-lg font-semibold text-mitti-900 dark:text-kora-100">
+              <h2 className="text-lg font-semibold text-kora-100">
                 {t('nyayavaani.listenSchemes', 'Listen to Government Schemes')}
               </h2>
             </div>
@@ -170,7 +170,7 @@ const NyayaVaani: React.FC = () => {
                 <div key={scheme.scheme_id} className="bg-mitti-50/50 dark:bg-night-card/50 rounded-xl p-4 border border-mitti-200/20 dark:border-night-border/20">
                   <div className="flex items-start justify-between mb-2">
                     <div>
-                      <h3 className="font-medium text-mitti-900 dark:text-kora-100 text-sm">{scheme.scheme_name}</h3>
+                      <h3 className="font-medium text-kora-200 text-sm">{scheme.scheme_name}</h3>
                       <p className="text-xs text-mitti-500 mt-0.5">{scheme.department}</p>
                     </div>
                     <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 flex-shrink-0 ml-2">

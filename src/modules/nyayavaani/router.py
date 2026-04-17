@@ -332,6 +332,10 @@ async def list_nyayavaani_schemes():
     try:
         with get_db() as db:
             cursor = db.cursor()
+            # Use DISTINCT ON (Postgres) / subquery (SQLite) to collapse dupes.
+            # Original used GROUP BY sm.scheme_id which works in SQLite (lax)
+            # but Postgres requires every non-aggregate column in GROUP BY.
+            # Subquery approach is dialect-agnostic.
             cursor.execute("""
                 SELECT
                     sm.scheme_id,
@@ -341,9 +345,16 @@ async def list_nyayavaani_schemes():
                     s.benefits,
                     s.process
                 FROM schemes_metadata sm
-                LEFT JOIN schemes s ON LOWER(sm.scheme_name) = LOWER(s.scheme_name)
+                LEFT JOIN (
+                    SELECT scheme_name,
+                           MAX(department)  AS department,
+                           MAX(eligibility) AS eligibility,
+                           MAX(benefits)    AS benefits,
+                           MAX(process)     AS process
+                    FROM schemes
+                    GROUP BY scheme_name
+                ) s ON LOWER(sm.scheme_name) = LOWER(s.scheme_name)
                 WHERE sm.status = 'active'
-                GROUP BY sm.scheme_id
                 ORDER BY sm.scheme_name
             """)
             rows = cursor.fetchall()

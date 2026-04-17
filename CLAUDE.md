@@ -6,7 +6,7 @@ NyayaSetu (न्यायसेतु) is an AI-powered citizen governance plat
 ## Tech Stack
 - **Backend**: Python, FastAPI, Uvicorn (port 8001)
 - **Frontend**: React 18 + TypeScript + Vite 5 + Electron 28
-- **LLM**: Qwen 2.5 14B (Q4_0) via Ollama (localhost:11434)
+- **LLM**: Groq Cloud (llama-3.3-70b-versatile) with Ollama local fallback (Qwen 2.5 14B)
 - **Embeddings**: paraphrase-multilingual-mpnet-base-v2 (768-dim)
 - **Vector Store**: FAISS IndexFlatIP
 - **Database**: SQLite (WAL mode), 20+ tables, 4 migrations
@@ -29,7 +29,7 @@ NyayaSetu (न्यायसेतु) is an AI-powered citizen governance plat
 - Ollama: `http://localhost:11434`
 
 ## Design System
-Custom Tailwind palette: mitti (clay), haldi (turmeric), neel (indigo), kora (cream), sukhiGhaas (grass), saffron (#FF9933), india-green (#138808), terracotta. Cultural elements: WarliIllustration, AshokaChakra, TricolorDivider, khadi-texture. Fonts: Noto Sans, Playfair Display, Yatra One.
+Unified dark theme. Deep sea-navy base (#060B18). Glass morphism surfaces with blue-tinted frosted glass. Accent palette: #0D92F4 (primary blue), #77CDFF (light blue), #F95454 (coral), #C62E2E (deep red). Aurora ambient orbs, grain overlay, gradient mesh backgrounds. Fonts: Inter, Playfair Display, Noto Sans Devanagari. No dark/light toggle — single unified theme.
 
 ## Frontend UI/UX Skills (Installed)
 

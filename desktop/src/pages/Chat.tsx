@@ -70,8 +70,8 @@ const Chat: React.FC = () => {
             <Bot className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h2 className="text-lg md:text-xl font-bold font-display text-mitti-900 dark:text-kora-100">{t('chat.title')}</h2>
-            <p className="text-xs text-mitti-500 dark:text-mitti-400">{t('chat.subtitle')}</p>
+            <h2 className="text-lg md:text-xl font-bold font-display text-kora-100 tracking-tight">{t('chat.title')}</h2>
+            <p className="text-sm text-mitti-500/40">{t('chat.subtitle')}</p>
           </div>
         </div>
       </div>

@@ -1,0 +1,82 @@
+# =============================================================================
+# .dockerignore - Exclude everything that shouldn't end up in the image
+# =============================================================================
+
+# --- Secrets (never ship these) ---
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+
+# --- Git / VCS ---
+.git/
+.gitignore
+.gitattributes
+
+# --- Python caches ---
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- IDE / editor ---
+.vscode/
+.idea/
+.claude/
+.agents/
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Frontend (shipped separately to Vercel) ---
+desktop/
+mobile/
+
+# --- Empty or stale backend placeholder ---
+backend/
+
+# --- Runtime data (replaced by Postgres / regenerated) ---
+data/governance.db
+data/governance.db-*
+data/cache/
+data/audio/
+data/formatted_docs/
+data/*.sql.gz
+data/*.dump
+
+# --- Build artifacts ---
+build/
+dist/
+*.egg-info/
+_dump/
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Docs and tests (not needed at runtime) ---
+tests/
+scripts/
+*.md
+!README.md
+
+# --- Docker itself ---
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# --- Translation models (unused in production path - Sarvam is cloud) ---
+translation_models/
+
+# --- Temp ---
+temp/
+tmp/

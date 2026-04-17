@@ -3,6 +3,14 @@ Centralized Database Manager
 
 Provides connection management, context managers, and migration support
 for the NyayaSetu governance database.
+
+Backend selection is automatic based on DATABASE_URL:
+  - Unset/empty or sqlite://... -> SQLite (local dev)
+  - postgresql://... or postgres://... -> PostgreSQL (production)
+
+Route code does not need to change between backends. The db_adapter layer
+translates SQLite idioms (?, PRAGMA, datetime('now'), lastrowid, etc.) to
+their Postgres equivalents at runtime.
 """
 
 import sqlite3
@@ -11,56 +19,57 @@ import logging
 from contextlib import contextmanager
 from typing import Optional
 
+from . import db_adapter
+
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.environ.get("NYAYASETU_DB_PATH", "data/governance.db")
+# Kept for backwards compatibility with any code that imports DB_PATH directly
+DB_PATH = db_adapter.get_db_path()
 
 
 def get_db_path() -> str:
-    return DB_PATH
+    return db_adapter.get_db_path()
 
 
-@contextmanager
-def get_db(db_path: Optional[str] = None):
-    """
-    Context manager for database connections.
-    Automatically commits on success, rolls back on error, and closes.
+# Re-export adapter primitives so existing `from .database import get_db` keeps working
+get_db = db_adapter.get_db
+get_connection = db_adapter.get_connection
 
-    Usage:
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT ...")
-    """
-    path = db_path or DB_PATH
-    conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
+
+def _init_postgres_schema():
+    """Execute postgres_schema.sql once on startup (idempotent)."""
+    from pathlib import Path
+    schema_path = Path(__file__).parent / "postgres_schema.sql"
+    if not schema_path.exists():
+        raise FileNotFoundError(f"Postgres schema file missing: {schema_path}")
+    sql = schema_path.read_text(encoding="utf-8")
+    # psycopg2 can execute a multi-statement script via a single execute() call
+    with get_db() as conn:
+        # Use the raw psycopg2 cursor - multi-statement DDL doesn't need adapter translation
+        raw_cur = conn._conn.cursor()
+        try:
+            raw_cur.execute(sql)
+        finally:
+            raw_cur.close()
+    logger.info("Postgres schema initialized from postgres_schema.sql")
+
+
+def _ensure_sqlite_unique_indexes(conn):
+    """Add UNIQUE indexes required for ON CONFLICT clauses (SQLite-only)."""
     try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
-
-
-def get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
-    """
-    Get a raw database connection (caller must close).
-    Prefer get_db() context manager instead.
-    """
-    path = db_path or DB_PATH
-    conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
+        conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_scheme_assignments_pair
+            ON scheme_assignments(scheme_id, officer_id)
+        """)
+    except Exception as e:
+        logger.debug(f"uq_scheme_assignments_pair index creation skipped: {e}")
 
 
 def init_core_tables():
     """Create core tables if they don't exist (called on startup)."""
+    if db_adapter.IS_POSTGRES:
+        _init_postgres_schema()
+        return
     with get_db() as conn:
         cursor = conn.cursor()
 
@@ -272,12 +281,18 @@ def init_core_tables():
 
         # Ensure all critical columns exist (handles pre-migration DBs)
         _ensure_columns_exist(conn)
+        _ensure_sqlite_unique_indexes(conn)
 
         logger.info("Core tables initialized")
 
 
 def _ensure_column_exists(conn, table: str, column: str, col_type: str, default=None):
-    """Add a column to a table if it doesn't already exist."""
+    """Add a column to a table if it doesn't already exist. Dialect-aware."""
+    if db_adapter.IS_POSTGRES:
+        # In Postgres mode the full schema is created by postgres_schema.sql
+        # which already includes every column. No-op for safety.
+        return
+    # SQLite path
     cursor = conn.execute(f"PRAGMA table_info({table})")
     columns = [row[1] for row in cursor.fetchall()]
     if column not in columns:

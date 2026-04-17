@@ -186,7 +186,7 @@ async def register(request: RegisterRequest, req: Request):
                     (officer_department, officer_designation, user["id"]),
                 )
                 conn.execute(
-                    "UPDATE officer_registration_codes SET is_used = 1, used_by = ?, used_at = CURRENT_TIMESTAMP WHERE code = ?",
+                    "UPDATE officer_registration_codes SET is_used = TRUE, used_by = ?, used_at = CURRENT_TIMESTAMP WHERE code = ?",
                     (user["id"], request.officer_code),
                 )
             user["department"] = officer_department
@@ -317,7 +317,7 @@ async def logout(
         with get_db() as conn:
             conn.execute("""
                 UPDATE sessions
-                SET is_active = 0, logout_at = ?, logout_reason = 'user_logout'
+                SET is_active = FALSE, logout_at = ?, logout_reason = 'user_logout'
                 WHERE token = ?
             """, (datetime.utcnow().isoformat(), token))
 
@@ -427,7 +427,7 @@ async def forgot_password(request: ForgotPasswordRequest):
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id FROM users WHERE email = ? AND is_active = 1",
+            "SELECT id FROM users WHERE email = ? AND is_active = TRUE",
             (request.email,),
         )
         row = cursor.fetchone()

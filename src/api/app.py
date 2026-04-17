@@ -131,16 +131,27 @@ app = FastAPI(
 # MIDDLEWARE
 # ============================================================================
 
+import os as _os
+
+# Base set - always allowed (local dev + Electron)
+_cors_base = [
+    "http://localhost:5173",
+    "http://localhost:8001",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:8001",
+    "app://.",
+    "file://",
+]
+
+# Production: additional origins from CORS_ORIGINS env var (comma-separated)
+_cors_env = _os.environ.get("CORS_ORIGINS", "").strip()
+_cors_extra = [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else []
+
+_cors_origins = list(dict.fromkeys(_cors_base + _cors_extra))  # de-duplicate
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:8001",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:8001",
-        "app://.",       # Electron production
-        "file://",       # Electron file protocol
-    ],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Accept", "Accept-Language"],

@@ -49,10 +49,10 @@ const NoticeDrafter: React.FC = () => {
             transition={{ duration: 0.5 }}
             className="mb-6"
           >
-            <h1 className="text-3xl font-bold text-mitti-900 dark:text-kora-100 mb-2">
+            <h1 className="text-2xl md:text-3xl font-bold text-kora-100 tracking-tight mb-2">
               {t('notices.title', 'Official Notice Drafter')}
             </h1>
-            <p className="text-mitti-600 dark:text-mitti-400">
+            <p className="text-sm text-mitti-500/40">
               {t('notices.subtitle', 'Generate, manage, and publish government notices')}
             </p>
           </motion.div>

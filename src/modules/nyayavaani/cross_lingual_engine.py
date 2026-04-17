@@ -1,11 +1,10 @@
 """
-Cross-Lingual Engine — Translation using Sarvam Translate API (online) + Ollama fallback.
+Cross-Lingual Engine — Translation using Sarvam Translate API (online) + LLM fallback.
 """
 
 import json
 import logging
 import re
-from typing import Optional
 from dataclasses import dataclass
 
 import httpx
@@ -53,17 +52,17 @@ class CrossLingualEngine:
                     method="sarvam-translate",
                 )
             except Exception as e:
-                logger.warning(f"Sarvam Translate failed, falling back to Ollama: {e}")
+                logger.warning(f"Sarvam Translate failed, falling back to LLM: {e}")
 
-        # Fallback to Ollama
-        translated = await self._translate_ollama(text, source_lang, target_lang, content_type)
+        # Fallback to LLM (Groq or Ollama depending on config)
+        translated = await self._translate_llm(text, source_lang, target_lang, content_type)
         return TranslationResult(
             original_text=text,
             translated_text=translated,
             source_language=source_lang,
             target_language=target_lang,
             content_type=content_type,
-            method="sarvam-m-tools",
+            method="llm-fallback",
         )
 
     async def _translate_sarvam(
@@ -126,10 +125,10 @@ class CrossLingualEngine:
             raise RuntimeError(f"Sarvam Translate returned empty result. Response: {data}")
         return translated
 
-    async def _translate_ollama(
+    async def _translate_llm(
         self, text: str, source_lang: str, target_lang: str, content_type: str
     ) -> str:
-        """Translate using Ollama sarvam-m-tools model."""
+        """Translate using the shared LLM client (Groq or Ollama)."""
         source_name = SUPPORTED_LANGUAGES.get(source_lang, SUPPORTED_LANGUAGES["en"]).english_name
         target_name = SUPPORTED_LANGUAGES.get(target_lang, SUPPORTED_LANGUAGES["hi"]).english_name
         target_native = SUPPORTED_LANGUAGES.get(target_lang, SUPPORTED_LANGUAGES["hi"]).native_name
@@ -146,7 +145,7 @@ IMPORTANT: Return ONLY a JSON object with this exact format:
 Text to translate:
 {text}"""
 
-        return await self._call_ollama(prompt)
+        return await self._call_llm(prompt)
 
     async def generate_grievance_acknowledgement(
         self,
@@ -173,7 +172,7 @@ The acknowledgement should:
 
 Return ONLY a JSON object: {{"acknowledgement": "your text here"}}"""
 
-        return await self._call_ollama(prompt)
+        return await self._call_llm(prompt)
 
     async def generate_voice_notice_intro(
         self, notice_subject: str, scheme_name: str, language: str = "hi"
@@ -191,26 +190,26 @@ Keep it to 1-2 sentences.
 
 Return ONLY a JSON object: {{"intro": "your text here"}}"""
 
-        return await self._call_ollama(prompt)
+        return await self._call_llm(prompt)
 
-    async def _call_ollama(self, prompt: str, retries: int = 2) -> str:
-        """Call Ollama with sarvam-m-tools model and parse JSON response."""
+    async def _call_llm(self, prompt: str, retries: int = 2) -> str:
+        """Call the shared LLM client (Groq or Ollama) and parse JSON response."""
+        from src.generation.llm_client import create_client
+
         for attempt in range(retries + 1):
             try:
-                async with httpx.AsyncClient(timeout=90.0) as client:
-                    response = await client.post(
-                        f"{self.config.ollama_base_url}/api/generate",
-                        json={
-                            "model": self.config.sarvam_m_model,
-                            "prompt": prompt,
-                            "stream": False,
-                            "options": {"temperature": 0.2, "num_predict": 500},
-                        },
-                    )
-                    response.raise_for_status()
-                    data = response.json()
+                client = create_client()
+                result = client.generate(
+                    prompt=prompt,
+                    system_prompt="You are a multilingual translator for Indian government services. Return ONLY valid JSON.",
+                    temperature=0.2,
+                    max_tokens=500,
+                )
 
-                raw_text = data.get("response", "").strip()
+                if not result.get("success"):
+                    raise RuntimeError(result.get("error", "LLM failed"))
+
+                raw_text = result["response"].strip()
 
                 # Try to parse as JSON
                 try:
@@ -222,7 +221,6 @@ Return ONLY a JSON object: {{"intro": "your text here"}}"""
                         if isinstance(v, str):
                             return v
                 except json.JSONDecodeError:
-                    # Try extracting JSON from response
                     json_match = re.search(r'\{[^}]+\}', raw_text)
                     if json_match:
                         try:
@@ -232,14 +230,13 @@ Return ONLY a JSON object: {{"intro": "your text here"}}"""
                                     return parsed[key]
                         except json.JSONDecodeError:
                             pass
-                    # Last resort: return raw text
                     return raw_text
 
             except Exception as e:
                 if attempt < retries:
-                    logger.warning(f"Ollama call failed (attempt {attempt + 1}): {e}")
+                    logger.warning(f"LLM call failed (attempt {attempt + 1}): {e}")
                     continue
-                logger.error(f"Ollama call failed after {retries + 1} attempts: {e}")
+                logger.error(f"LLM call failed after {retries + 1} attempts: {e}")
                 raise RuntimeError(f"Cross-lingual engine unavailable: {e}")
 
         return ""
