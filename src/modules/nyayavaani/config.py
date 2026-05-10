@@ -15,8 +15,12 @@ class NyayaVaaniConfig:
     """Configuration for NyayaVaani services."""
 
     # Sarvam AI
+    # SECURITY: Previously this field had a hard-coded API key literal in the
+    # source. That literal has been treated as BURNED — it MUST be rotated
+    # before any production deploy. The key now comes exclusively from the
+    # SARVAM_API_KEY environment variable. Never check secrets into VCS.
     sarvam_api_key: str = field(
-        default_factory=lambda: os.getenv("SARVAM_API_KEY", "***REDACTED-SARVAM-API-KEY***")
+        default_factory=lambda: os.environ.get("SARVAM_API_KEY", "")
     )
     sarvam_base_url: str = "https://api.sarvam.ai"
 
@@ -56,3 +60,17 @@ class NyayaVaaniConfig:
         logger.info(f"NyayaVaani mode: {mode}")
         logger.info(f"Ollama cross-lingual model: {self.sarvam_m_model}")
         logger.info(f"Audio dirs: uploads={self.audio_upload_dir}, output={self.audio_output_dir}")
+
+        # Production guardrail: missing Sarvam key = no cloud STT/TTS/translate.
+        # In production this is a configuration error; warn loudly so ops sees it.
+        env = os.environ.get("ENV", "development").lower()
+        if not self.sarvam_api_key:
+            if env == "production":
+                logger.error(
+                    "SARVAM_API_KEY is missing in production. Online ASR/TTS/Translate "
+                    "will be unavailable and offline fallbacks may not work on this host."
+                )
+            else:
+                logger.warning(
+                    "SARVAM_API_KEY not set — running NyayaVaani in OFFLINE mode (dev only)."
+                )

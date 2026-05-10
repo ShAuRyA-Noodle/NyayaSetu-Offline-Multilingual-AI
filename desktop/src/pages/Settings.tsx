@@ -20,6 +20,100 @@ interface Session {
   expires_at: string;
 }
 
+// ─── Sub-components defined at module scope so they don't remount on every keystroke ───
+
+interface ToggleProps {
+  label: string;
+  value: boolean;
+  onChange: (next: boolean) => void;
+  description?: string;
+}
+
+const Toggle: React.FC<ToggleProps> = ({ label, value, onChange, description }) => (
+  <div className="flex items-center justify-between py-1">
+    <div className="flex-1">
+      <p className="text-sm font-medium text-kora-200">{label}</p>
+      {description && <p className="text-xs text-slate-400/40 mt-0.5">{description}</p>}
+    </div>
+    <button
+      onClick={() => onChange(!value)}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
+        value ? 'bg-[#0D92F4]' : 'bg-white/[0.08]'
+      }`}
+    >
+      <span
+        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 shadow-sm ${
+          value ? 'translate-x-6' : 'translate-x-1'
+        }`}
+      />
+    </button>
+  </div>
+);
+
+interface PasswordInputProps {
+  label: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  show: boolean;
+  onToggle: () => void;
+  placeholder?: string;
+}
+
+const PasswordInput: React.FC<PasswordInputProps> = ({
+  label,
+  value,
+  onChange,
+  show,
+  onToggle,
+  placeholder,
+}) => (
+  <div>
+    <label className="block text-xs font-medium text-slate-400/50 mb-1.5 uppercase tracking-wider">
+      {label}
+    </label>
+    <div className="relative group">
+      <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400/40 group-focus-within:text-[#77CDFF] transition-colors" />
+      <input
+        type={show ? 'text' : 'password'}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        required
+        className="w-full pl-10 pr-10 py-2.5 village-input text-sm"
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500/30 hover:text-[#77CDFF] transition-colors"
+      >
+        {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+      </button>
+    </div>
+  </div>
+);
+
+interface SectionProps {
+  icon: React.ComponentType<any>;
+  title: string;
+  children: React.ReactNode;
+}
+
+const Section: React.FC<SectionProps> = ({ icon: Icon, title, children }) => (
+  <motion.div
+    className="village-card p-5"
+    initial={{ opacity: 0, y: 16 }}
+    animate={{ opacity: 1, y: 0 }}
+  >
+    <div className="flex items-center gap-3 mb-5">
+      <div className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center">
+        <Icon className="w-4 h-4 text-slate-400/60" />
+      </div>
+      <h3 className="text-sm font-semibold text-kora-200 uppercase tracking-wider">{title}</h3>
+    </div>
+    <div className="space-y-4">{children}</div>
+  </motion.div>
+);
+
 const Settings: React.FC = () => {
   const { user } = useAuth();
   const { t, i18n } = useTranslation();
@@ -102,7 +196,32 @@ const Settings: React.FC = () => {
   };
 
   const handleClearCache = () => {
-    if (confirm('Clear all cached data?')) { localStorage.clear(); sessionStorage.clear(); window.location.reload(); }
+    if (!confirm('Clear all cached data?')) return;
+    // Preserve auth + identity. Only purge cache-related keys.
+    const PROTECTED_KEYS = new Set(['token', 'user']);
+    const CACHE_KEY_PREFIXES = ['cache:', 'nyayasetu:cache:', 'rag:', 'schemes:cache'];
+    const CACHE_KEY_EXACT = new Set([
+      'notifications',
+      'autoSync',
+      'language',
+      'lastSync',
+    ]);
+
+    try {
+      const keys = Object.keys(localStorage);
+      keys.forEach((k) => {
+        if (PROTECTED_KEYS.has(k)) return;
+        if (
+          CACHE_KEY_EXACT.has(k) ||
+          CACHE_KEY_PREFIXES.some((p) => k.startsWith(p))
+        ) {
+          localStorage.removeItem(k);
+        }
+      });
+      sessionStorage.clear();
+    } finally {
+      window.location.reload();
+    }
   };
 
   const handleExportData = () => {
@@ -115,54 +234,6 @@ const Settings: React.FC = () => {
 
   const getDeviceIcon = (d: string) => d === 'mobile' ? Smartphone : d === 'tablet' ? Monitor : Laptop;
   const formatDate = (d: string) => new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-
-  // ─── Toggle ───
-  const Toggle = ({ label, value, onChange, description }: any) => (
-    <div className="flex items-center justify-between py-1">
-      <div className="flex-1">
-        <p className="text-sm font-medium text-kora-200">{label}</p>
-        {description && <p className="text-xs text-slate-400/40 mt-0.5">{description}</p>}
-      </div>
-      <button onClick={() => onChange(!value)}
-        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
-          value ? 'bg-[#0D92F4]' : 'bg-white/[0.08]'
-        }`}>
-        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 shadow-sm ${
-          value ? 'translate-x-6' : 'translate-x-1'
-        }`} />
-      </button>
-    </div>
-  );
-
-  // ─── Password Input ───
-  const PasswordInput = ({ label, value, onChange, show, onToggle, placeholder }: any) => (
-    <div>
-      <label className="block text-xs font-medium text-slate-400/50 mb-1.5 uppercase tracking-wider">{label}</label>
-      <div className="relative group">
-        <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400/40 group-focus-within:text-[#77CDFF] transition-colors" />
-        <input type={show ? 'text' : 'password'} value={value} onChange={onChange} placeholder={placeholder} required
-          className="w-full pl-10 pr-10 py-2.5 village-input text-sm" />
-        <button type="button" onClick={onToggle}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500/30 hover:text-[#77CDFF] transition-colors">
-          {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-        </button>
-      </div>
-    </div>
-  );
-
-  // ─── Section Card ───
-  const Section = ({ icon: Icon, title, children }: { icon: any; title: string; children: React.ReactNode }) => (
-    <motion.div className="village-card p-5"
-      initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
-      <div className="flex items-center gap-3 mb-5">
-        <div className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center">
-          <Icon className="w-4 h-4 text-slate-400/60" />
-        </div>
-        <h3 className="text-sm font-semibold text-kora-200 uppercase tracking-wider">{title}</h3>
-      </div>
-      <div className="space-y-4">{children}</div>
-    </motion.div>
-  );
 
   return (
     <PageTransition>

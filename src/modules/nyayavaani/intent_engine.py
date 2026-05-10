@@ -11,6 +11,14 @@ from typing import Optional
 
 from .config import NyayaVaaniConfig
 
+# Sanitize transcribed citizen text before it lands in an LLM prompt.
+try:
+    from src.generation.prompt_templates import sanitize_user_input
+except ImportError:
+    # Fallback no-op so this module never hard-fails on import.
+    def sanitize_user_input(text: str, max_len: int = 4000) -> str:  # type: ignore
+        return (text or "")[:max_len]
+
 logger = logging.getLogger(__name__)
 
 
@@ -55,6 +63,8 @@ class IntentEngine:
 
     async def classify_intent(self, text: str, language: str = "hi") -> IntentResult:
         """Classify user intent from transcribed text."""
+        # Strip jailbreak markers from transcribed audio before prompting.
+        safe_text = sanitize_user_input(text, max_len=2000)
         prompt = f"""You are an intent classifier for an Indian government services platform (NyayaSetu).
 The citizen is speaking in {language}. Classify their speech into one of these intents:
 - submit_grievance: citizen wants to file a complaint or report a problem
@@ -68,7 +78,7 @@ The citizen is speaking in {language}. Classify their speech into one of these i
 Also extract entities like: scheme_name, grievance_id, department, location, category.
 
 Citizen's text:
-"{text}"
+"{safe_text}"
 
 Return ONLY a JSON object:
 {{"intent": "one_of_the_intents", "confidence": 0.0_to_1.0, "entities": {{"key": "value"}}}}"""
@@ -106,10 +116,11 @@ Return ONLY a JSON object:
         self, text: str, language: str = "hi"
     ) -> VoiceGrievanceData:
         """Extract structured grievance data from voice transcription."""
+        safe_text = sanitize_user_input(text, max_len=5000)
         prompt = f"""Extract structured grievance information from the following citizen's voice complaint.
 
 Citizen's text (language: {language}):
-"{text}"
+"{safe_text}"
 
 Return ONLY a JSON object:
 {{
@@ -154,12 +165,55 @@ Return ONLY a JSON object:
 
     @staticmethod
     def _parse_json_response(raw: str) -> dict:
-        """Parse JSON from LLM response, handling common issues."""
+        """Parse JSON from LLM response, handling common issues.
+
+        The previous regex `\\{[\\s\\S]*\\}` is greedy: if the model emits
+        any prose containing braces (e.g. "{example}") AFTER the real JSON,
+        it slurps everything between the first `{` and the FINAL `}`,
+        producing an unparseable blob. We do two things instead:
+
+        1. Try direct json.loads on the trimmed payload.
+        2. Walk the string and extract the first balanced `{...}` block.
+        """
+        if not raw:
+            return {}
         try:
             return json.loads(raw)
         except json.JSONDecodeError:
             pass
-        json_match = re.search(r'\{[\s\S]*\}', raw)
+
+        # Balanced-brace scanner: find the first `{` and read until depth 0,
+        # ignoring braces inside string literals.
+        depth = 0
+        start: Optional[int] = None
+        in_str = False
+        esc = False
+        for i, ch in enumerate(raw):
+            if in_str:
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == '"':
+                    in_str = False
+                continue
+            if ch == '"':
+                in_str = True
+            elif ch == "{":
+                if start is None:
+                    start = i
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0 and start is not None:
+                    candidate = raw[start : i + 1]
+                    try:
+                        return json.loads(candidate)
+                    except json.JSONDecodeError:
+                        # Reset and keep looking for a later balanced block.
+                        start = None
+        # Final non-greedy fallback for malformed-but-close payloads.
+        json_match = re.search(r'\{[\s\S]*?\}', raw)
         if json_match:
             try:
                 return json.loads(json_match.group())

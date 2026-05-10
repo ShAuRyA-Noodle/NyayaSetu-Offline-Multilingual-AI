@@ -7,10 +7,13 @@ User management, audit logs, analytics, system health, and admin operations.
 import os
 import logging
 from datetime import datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from .auth_routes import require_role
+from .auth_utils import revoke_all_user_sessions, log_audit_action
 from .dependencies import get_summarizer
 from .database import get_db
 
@@ -18,12 +21,32 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/admin", tags=["Admin"])
 
 
+# ============================================================================
+# LOCAL REQUEST MODELS
+# ============================================================================
+
+# typing.Literal is preferred over Pydantic Field constraints for fixed enums.
+try:
+    from typing import Literal
+except ImportError:  # pragma: no cover
+    from typing_extensions import Literal  # type: ignore
+
+
+class AdminUpdateUserRequest(BaseModel):
+    role: Optional[Literal["citizen", "officer", "admin"]] = None
+    department: Optional[str] = Field(default=None, max_length=200)
+    designation: Optional[str] = Field(default=None, max_length=200)
+    is_active: Optional[bool] = None
+
+
 @router.get("/users")
 async def list_users(
     role: str = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     current_user: dict = Depends(require_role("admin")),
 ):
-    """List all users with optional role filter."""
+    """List all users with optional role filter. Paginated (max 100 per page)."""
     try:
         with get_db() as conn:
             cursor = conn.cursor()
@@ -32,20 +55,28 @@ async def list_users(
                     SELECT id, username, email, role, department, designation,
                            is_active, created_at, last_login, login_count,
                            failed_login_attempts, locked_until
-                    FROM users WHERE role = ? ORDER BY created_at DESC
-                """, (role,))
+                    FROM users WHERE role = ? ORDER BY created_at DESC LIMIT ? OFFSET ?
+                """, (role, limit, offset))
             else:
                 cursor.execute("""
                     SELECT id, username, email, role, department, designation,
                            is_active, created_at, last_login, login_count,
                            failed_login_attempts, locked_until
-                    FROM users ORDER BY created_at DESC
-                """)
+                    FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?
+                """, (limit, offset))
 
             users = [dict(row) for row in cursor.fetchall()]
-        return {"users": users, "count": len(users)}
+
+            # Total count for pagination UI
+            if role:
+                cursor.execute("SELECT COUNT(*) as cnt FROM users WHERE role = ?", (role,))
+            else:
+                cursor.execute("SELECT COUNT(*) as cnt FROM users")
+            total = cursor.fetchone()["cnt"]
+
+        return {"users": users, "count": len(users), "total": total, "limit": limit, "offset": offset}
     except Exception as e:
-        logger.error(f"List users failed: {e}")
+        logger.exception("List users failed")
         raise HTTPException(500, "Failed to fetch users")
 
 
@@ -69,35 +100,49 @@ async def get_user(user_id: int, current_user: dict = Depends(require_role("admi
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, str(e))
+        logger.exception("Get user failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.put("/users/{user_id}")
 async def update_user(
     user_id: int,
-    role: str = Query(default=None),
-    department: str = Query(default=None),
-    designation: str = Query(default=None),
-    is_active: bool = Query(default=None),
+    body: AdminUpdateUserRequest,
     current_user: dict = Depends(require_role("admin")),
 ):
-    """Update user (role, department, status)."""
+    """Update user (role, department, status). Body validated via Pydantic."""
     try:
+        # Capture pre-state for audit
         with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT role, department, designation, is_active FROM users WHERE id = ?",
+                (user_id,),
+            )
+            old_row = cursor.fetchone()
+            if not old_row:
+                raise HTTPException(404, "User not found")
+            old_state = dict(old_row)
+
             updates = []
             params = []
-            if role is not None:
+            changes = {}
+            if body.role is not None:
                 updates.append("role = ?")
-                params.append(role)
-            if department is not None:
+                params.append(body.role)
+                changes["role"] = {"old": old_state["role"], "new": body.role}
+            if body.department is not None:
                 updates.append("department = ?")
-                params.append(department)
-            if designation is not None:
+                params.append(body.department)
+                changes["department"] = {"old": old_state["department"], "new": body.department}
+            if body.designation is not None:
                 updates.append("designation = ?")
-                params.append(designation)
-            if is_active is not None:
+                params.append(body.designation)
+                changes["designation"] = {"old": old_state["designation"], "new": body.designation}
+            if body.is_active is not None:
                 updates.append("is_active = ?")
-                params.append(is_active)
+                params.append(body.is_active)
+                changes["is_active"] = {"old": old_state["is_active"], "new": body.is_active}
 
             if not updates:
                 raise HTTPException(400, "No fields to update")
@@ -107,22 +152,50 @@ async def update_user(
                 f"UPDATE users SET {', '.join(updates)} WHERE id = ?", params
             )
 
-        return {"success": True, "user_id": user_id}
+        # If role was changed, treat as privileged action
+        if "role" in changes:
+            log_audit_action(
+                action="user_role_change",
+                user_id=current_user["id"],
+                target_id=user_id,
+                metadata=changes,
+            )
+
+        log_audit_action(
+            action="user_update",
+            user_id=current_user["id"],
+            target_id=user_id,
+            metadata=changes,
+        )
+
+        return {"success": True, "user_id": user_id, "changes": list(changes.keys())}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, str(e))
+        logger.exception("Update user failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.post("/users/{user_id}/disable")
 async def disable_user(user_id: int, current_user: dict = Depends(require_role("admin"))):
-    """Disable a user account."""
+    """Disable a user account and revoke all of their active sessions."""
     try:
         with get_db() as conn:
             conn.execute("UPDATE users SET is_active = FALSE WHERE id = ?", (user_id,))
-        return {"success": True, "user_id": user_id, "is_active": False}
+
+        # Revoke every active session so the disabled user is locked out immediately
+        revoke_all_user_sessions(user_id)
+
+        log_audit_action(
+            action="user_disable",
+            user_id=current_user["id"],
+            target_id=user_id,
+        )
+
+        return {"success": True, "user_id": user_id, "is_active": False, "sessions_revoked": True}
     except Exception as e:
-        raise HTTPException(500, str(e))
+        logger.exception("Disable user failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.post("/users/{user_id}/unlock")
@@ -134,9 +207,15 @@ async def unlock_user(user_id: int, current_user: dict = Depends(require_role("a
                 UPDATE users SET failed_login_attempts = 0, locked_until = NULL
                 WHERE id = ?
             """, (user_id,))
+        log_audit_action(
+            action="user_unlock",
+            user_id=current_user["id"],
+            target_id=user_id,
+        )
         return {"success": True, "user_id": user_id, "unlocked": True}
     except Exception as e:
-        raise HTTPException(500, str(e))
+        logger.exception("Unlock user failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.get("/audit-logs")
@@ -172,8 +251,8 @@ async def get_audit_logs(
 
         return {"logs": logs, "count": len(logs), "total": total}
     except Exception as e:
-        logger.error(f"Audit logs failed: {e}")
-        raise HTTPException(500, str(e))
+        logger.exception("Audit logs failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.get("/analytics/overview")
@@ -218,16 +297,16 @@ async def analytics_overview(current_user: dict = Depends(require_role("admin"))
             "active_schemes": active_schemes,
         }
     except Exception as e:
-        logger.error(f"Analytics overview failed: {e}")
-        raise HTTPException(500, str(e))
+        logger.exception("Analytics overview failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.get("/analytics/trends")
 async def analytics_trends(
-    days: int = Query(default=30),
+    days: int = Query(default=30, ge=1, le=365),
     current_user: dict = Depends(require_role("admin")),
 ):
-    """Historical trend data."""
+    """Historical trend data. `days` clamped to 1..365."""
     try:
         # Compute cutoff in Python for dialect-agnostic queries.
         # SQLite's DATE('now', '-N days') doesn't exist in Postgres.
@@ -259,7 +338,8 @@ async def analytics_trends(
             "user_trend": user_trend,
         }
     except Exception as e:
-        raise HTTPException(500, str(e))
+        logger.exception("Analytics trends failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.get("/analytics/officer-performance")
@@ -298,7 +378,8 @@ async def officer_performance(current_user: dict = Depends(require_role("admin")
 
         return {"officers": officers}
     except Exception as e:
-        raise HTTPException(500, str(e))
+        logger.exception("Officer performance failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.get("/system/health")
@@ -329,7 +410,8 @@ async def system_health(current_user: dict = Depends(require_role("admin"))):
         health["timestamp"] = datetime.utcnow().isoformat()
         return health
     except Exception as e:
-        raise HTTPException(500, str(e))
+        logger.exception("System health failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.post("/officer-codes/generate")
@@ -353,14 +435,20 @@ async def generate_officer_code(
                 VALUES (?, ?, ?, ?, ?)
             """, (code, department, designation, current_user["id"], expires_at))
 
+        log_audit_action(
+            action="officer_code_create",
+            user_id=current_user["id"],
+            metadata={"department": department, "designation": designation},
+        )
+
         return {
             "success": True, "code": code,
             "department": department, "designation": designation,
             "expires_at": expires_at,
         }
     except Exception as e:
-        logger.error(f"Generate officer code failed: {e}")
-        raise HTTPException(500, str(e))
+        logger.exception("Generate officer code failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.get("/officer-codes")
@@ -394,44 +482,50 @@ async def list_officer_codes(current_user: dict = Depends(require_role("admin"))
 
         return {"codes": codes, "count": len(codes)}
     except Exception as e:
-        logger.error(f"List officer codes failed: {e}")
-        raise HTTPException(500, str(e))
+        logger.exception("List officer codes failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.get("/officer-codes/validate")
 async def validate_officer_code(code: str = Query(...)):
-    """Validate an officer registration code (for real-time frontend check)."""
+    """Validate an officer registration code (for real-time frontend check during registration).
+
+    SECURITY: this endpoint is intentionally unauthenticated to enable the
+    registration UX. To prevent department/designation enumeration, the
+    response is restricted to `{"valid": bool}` only — no leak of department
+    or designation. The full payload is available via the authenticated
+    /officer-codes list endpoint.
+    """
+    logger.warning("officer-codes/validate called unauthenticated; redacted response only")
     try:
         with get_db() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT code, department, designation, is_used, expires_at FROM officer_registration_codes WHERE code = ?",
+                "SELECT code, is_used, expires_at FROM officer_registration_codes WHERE code = ?",
                 (code,),
             )
             row = cursor.fetchone()
             if not row:
-                return {"valid": False, "message": "Invalid code"}
+                return {"valid": False}
             data = dict(row)
             if data.get("is_used"):
-                return {"valid": False, "message": "Code already used"}
+                return {"valid": False}
             if data.get("expires_at"):
                 try:
                     exp = datetime.fromisoformat(data["expires_at"])
                     if exp < datetime.utcnow():
-                        return {"valid": False, "message": "Code expired"}
+                        return {"valid": False}
                 except (ValueError, TypeError):
                     pass
-            return {
-                "valid": True, "department": data["department"],
-                "designation": data.get("designation"),
-            }
-    except Exception as e:
-        return {"valid": False, "message": str(e)}
+            return {"valid": True}
+    except Exception:
+        logger.exception("Validate officer code failed")
+        return {"valid": False}
 
 
 @router.post("/clear-cache")
-async def clear_all_caches():
-    """Clear all module caches."""
+async def clear_all_caches(current_user: dict = Depends(require_role("admin"))):
+    """Clear all module caches. Admin only."""
     cleared = {}
     try:
         summarizer = get_summarizer()
@@ -439,5 +533,11 @@ async def clear_all_caches():
         cleared["summarizer"] = "cleared"
     except Exception as e:
         cleared["summarizer"] = f"failed: {e}"
+
+    log_audit_action(
+        action="cache_clear",
+        user_id=current_user["id"],
+        metadata=cleared,
+    )
 
     return {"message": "Cache clearing attempted", "results": cleared}

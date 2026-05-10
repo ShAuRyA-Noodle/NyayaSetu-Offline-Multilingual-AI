@@ -8,13 +8,13 @@ import logging
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 
-from .llm_client import OllamaClient, LLMConfig
+from .llm_client import OllamaClient, LLMConfig  # noqa: F401  (LLMConfig kept for back-compat re-export)
 from .prompt_templates import (
-    SYSTEM_PROMPT,
-    build_prompt,
-    format_context_from_chunks,
-    select_prompt_template,
-    QueryIntent
+    SYSTEM_PROMPT,  # noqa: F401  (re-exported via __all__ at module bottom for legacy import paths)
+    build_prompt,  # noqa: F401
+    format_context_from_chunks,  # noqa: F401
+    select_prompt_template,  # noqa: F401
+    QueryIntent,  # noqa: F401
 )
 
 # Configure logging
@@ -61,64 +61,127 @@ class AnswerGenerator:
     def __init__(
         self,
         llm_client: Optional[OllamaClient] = None,
+        rag_engine: Optional[Any] = None,
         min_context_score: float = 0.3,
-        max_answer_length: int = 500
+        max_answer_length: int = 500,
     ):
         """
         Initialize Answer Generator
-        
+
         Args:
-            llm_client: Ollama client (creates default if not provided)
+            llm_client: LLM client (creates default if not provided)
+            rag_engine: Optional RAGEngine for the .generate() entry-point that
+                does retrieval + prompt + LLM in one call. Can be None for
+                callers that pass `context_chunks` directly via legacy paths.
             min_context_score: Minimum similarity score to use context
             max_answer_length: Maximum allowed answer length (chars)
         """
         self.llm_client = llm_client or OllamaClient()
+        self.rag_engine = rag_engine
         self.min_context_score = min_context_score
         self.max_answer_length = max_answer_length
-        
-        # Verify LLM is available
+
+        # Verify LLM is available — health check is a soft warning rather than
+        # a hard crash because the answer-generator may be constructed during
+        # bootstrapping where transient network blips are common. Real
+        # production checks live in `assert_groq_reachable()`.
         if not self.llm_client.health_check():
-            logger.error("LLM health check failed - answers will fail")
-            raise RuntimeError(
-                "Ollama is not running or model not found. "
-                "Run 'ollama serve' and ensure llama3.1:8b-instruct-q4_0 is pulled."
+            logger.warning(
+                "LLM health check failed at AnswerGenerator init — calls will "
+                "still be attempted but may return service_degraded."
             )
-        
+
         logger.info("AnswerGenerator initialized successfully")
-    
-def generate(
-    self,
-    query: str,
-    context_chunks: List[Tuple[float, str, Dict]],
-    language: Language = "en",
-    max_tokens: int = 500
-) -> str:
-    """Generate answer using LLM with RAG context"""
-    
-    # Build context from chunks
-    context_text = "\n\n".join([
-        f"[Source {i+1}] {chunk[1]}"
-        for i, chunk in enumerate(context_chunks[:5])
-    ])
-    
-    # Use multilingual system prompt
-    system_prompt = MULTILINGUAL_SYSTEM_PROMPT
-    
-    # Build final prompt
-    prompt = ANSWER_QUESTION_PROMPT.format(
-        system_prompt=system_prompt,
-        context=context_text,
-        query=query
-    )
-    
-    # Generate with appropriate temperature for factual responses
-    response = self.llm_client.generate(
-        prompt=prompt,
-        temperature=0.3,  # Lower for more factual
-        max_tokens=max_tokens
-    )
-    
-    return response
+
+    def generate(
+        self,
+        query: str,
+        language: str = "en",
+        top_k: int = 3,
+    ) -> Dict[str, Any]:
+        """Run RAG: retrieve → prompt → LLM → validate.
+
+        Returns a dict with keys: success, answer, sources, confidence,
+        language. On failure: {success: False, error: ...}.
+        """
+        # Local import keeps module-level imports tidy and avoids cycles.
+        from .prompt_templates import (
+            MULTILINGUAL_SYSTEM_PROMPT as _MULTILINGUAL_SYSTEM_PROMPT,
+            select_prompt_template as _select_prompt_template,
+            format_context_from_chunks as _format_context_from_chunks,
+            sanitize_user_input as _sanitize_user_input,
+        )
+
+        if self.rag_engine is None:
+            return {
+                "success": False,
+                "error": "rag_engine_unavailable",
+                "language": language,
+            }
+
+        safe_query = _sanitize_user_input(query)
+        if not safe_query:
+            return {
+                "success": False,
+                "error": "empty_query",
+                "language": language,
+            }
+
+        # RAGEngine.retrieve returns List[(score, metadata, explanation)].
+        # Normalise into the dict shape the rest of this class expects.
+        raw_results = self.rag_engine.retrieve(safe_query, top_k=top_k)
+        chunks: List[Dict[str, Any]] = []
+        for score, metadata, explanation in raw_results:
+            chunks.append({
+                "scheme_name": metadata.get("scheme_name", ""),
+                "section": metadata.get("section_type", ""),
+                "text": metadata.get("content") or explanation,
+                "score": float(score),
+            })
+
+        if not chunks:
+            no_ctx = self._handle_no_context(safe_query)
+            return {
+                "success": no_ctx.success,
+                "answer": no_ctx.answer,
+                "sources": [],
+                "confidence": 0.0,
+                "warnings": no_ctx.warnings,
+                "language": language,
+            }
+
+        context = _format_context_from_chunks(chunks)
+        prompt_text = _select_prompt_template(safe_query, context, language)
+
+        result = self.llm_client.generate(
+            prompt=prompt_text,
+            system_prompt=_MULTILINGUAL_SYSTEM_PROMPT,
+            max_tokens=1000,
+            temperature=0.1,
+        )
+        if not result.get("success"):
+            return {
+                "success": False,
+                "error": result.get("error", "LLM unavailable"),
+                "language": language,
+            }
+
+        answer = result.get("response", "").strip()
+        sources = self._extract_sources(answer, chunks)
+        is_valid, warnings = self._validate_answer(answer, context, sources, chunks)
+        confidence = (
+            sum(c["score"] for c in chunks) / len(chunks) if chunks else 0.0
+        )
+        return {
+            "success": True,
+            "answer": answer,
+            "sources": [s.__dict__ for s in sources],
+            "confidence": round(confidence, 3),
+            "is_valid": is_valid,
+            "warnings": warnings,
+            "language": language,
+        }
+
     def _extract_sources(
         self,
         answer: str,

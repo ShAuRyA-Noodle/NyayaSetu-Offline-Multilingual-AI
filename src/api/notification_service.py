@@ -2,6 +2,24 @@
 Notification Service
 
 In-app notification creation, retrieval, and management.
+
+TODO (migration / DBA): the following indexes should exist on
+grievance_notifications to keep recipient-fanout and unread-count queries
+O(log n) as the table grows:
+
+    CREATE INDEX IF NOT EXISTS idx_notifications_recipient_status_created
+        ON grievance_notifications (recipient_id, status, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_notifications_recipient_read
+        ON grievance_notifications (recipient_id, read_at);
+    CREATE INDEX IF NOT EXISTS idx_notifications_grievance
+        ON grievance_notifications (grievance_id);
+
+TODO (concurrency): the helpers below are synchronous DB inserts. All current
+callers (route handlers, sla_service.check_all_sla_breaches background job)
+also run synchronously, so wrapping in `asyncio.to_thread` is unnecessary
+right now. If a future async caller emerges, wrap the helper at the call
+site, e.g.:
+    await asyncio.to_thread(notification_service.notify_status_change, ...)
 """
 
 import logging

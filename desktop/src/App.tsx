@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { HashRouter } from 'react-router-dom';
+import { BrowserRouter } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
 import AppRoutes from './routes';
@@ -159,7 +159,7 @@ function App() {
 
   return (
     <ErrorBoundary>
-    <HashRouter>
+    <BrowserRouter>
       <ThemeProvider>
         <SmoothScrollProvider>
         <AuthProvider>
@@ -200,7 +200,7 @@ function App() {
         </AuthProvider>
         </SmoothScrollProvider>
       </ThemeProvider>
-    </HashRouter>
+    </BrowserRouter>
     </ErrorBoundary>
   );
 }

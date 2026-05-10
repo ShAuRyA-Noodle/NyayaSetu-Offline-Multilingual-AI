@@ -6,8 +6,9 @@ import logging
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from fastapi.responses import FileResponse
 
 from .models import (
@@ -28,6 +29,85 @@ def _get_service():
     """Get NyayaVaani service from app state."""
     from src.api.dependencies import get_nyayavaani_service
     return get_nyayavaani_service()
+
+
+def _get_current_user():
+    """Resolve the auth dep at call time so this module is importable even
+    if `src.api.auth_routes` does heavy lazy initialisation."""
+    from src.api.auth_routes import get_current_user
+    return get_current_user
+
+
+# ---------------------------------------------------------------------------
+# audio_files ownership table
+#
+# Maps a generated TTS filename → owner_id + scope. Without this, any
+# authenticated user could iterate filenames and listen to other citizens'
+# grievance acknowledgements (PII leak). Public-scope rows are allowed for
+# notice / scheme narration which any citizen may stream.
+# ---------------------------------------------------------------------------
+
+_AUDIO_FILES_TABLE_READY = False
+
+
+def _ensure_audio_files_table() -> None:
+    global _AUDIO_FILES_TABLE_READY
+    if _AUDIO_FILES_TABLE_READY:
+        return
+    try:
+        from src.api.database import get_db
+        with get_db() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS audio_files (
+                    filename   TEXT PRIMARY KEY,
+                    owner_id   INTEGER,
+                    scope      TEXT NOT NULL DEFAULT 'private',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        _AUDIO_FILES_TABLE_READY = True
+    except Exception as e:
+        logger.error(f"Failed to ensure audio_files table: {e}")
+
+
+def _register_audio_file(filename: str, owner_id: Optional[int], scope: str = "private") -> None:
+    """Insert a row mapping a generated audio file to its owner + scope."""
+    _ensure_audio_files_table()
+    try:
+        from src.api.database import get_db
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT OR REPLACE INTO audio_files (filename, owner_id, scope) VALUES (?, ?, ?)",
+                (filename, owner_id, scope),
+            )
+    except Exception as e:
+        # Don't let ownership-tracking failure break TTS — but log loudly.
+        logger.error(f"Failed to register audio file {filename}: {e}")
+
+
+def _audio_file_acl(filename: str) -> Optional[dict]:
+    """Look up scope + owner_id for a filename. Returns None if no row."""
+    _ensure_audio_files_table()
+    try:
+        from src.api.database import get_db
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT owner_id, scope FROM audio_files WHERE filename = ?",
+                (filename,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            if hasattr(row, "keys"):
+                return {"owner_id": row["owner_id"], "scope": row["scope"]}
+            return {"owner_id": row[0], "scope": row[1]}
+    except Exception as e:
+        logger.error(f"Failed to read audio_files ACL for {filename}: {e}")
+        return None
 
 
 # ============================================================================
@@ -82,7 +162,10 @@ async def transcribe_audio(
 # ============================================================================
 
 @router.post("/synthesize", response_model=TTSResponse)
-async def synthesize_speech(request: TTSRequest):
+async def synthesize_speech(
+    request: TTSRequest,
+    current_user: dict = Depends(_get_current_user()),
+):
     """Convert text to speech audio."""
     service = _get_service()
 
@@ -93,6 +176,12 @@ async def synthesize_speech(request: TTSRequest):
             voice_gender=request.voice_gender,
         )
         filename = result.audio_path.name
+        # Register the file with its owner so /audio/<filename> can ACL-check.
+        _register_audio_file(
+            filename=filename,
+            owner_id=current_user.get("id") if current_user else None,
+            scope="private",
+        )
         return TTSResponse(
             audio_url=f"/api/v1/nyayavaani/audio/{filename}",
             duration_seconds=result.duration_seconds,
@@ -135,7 +224,10 @@ async def classify_intent(request: IntentClassifyRequest):
 # ============================================================================
 
 @router.post("/voice-grievance", response_model=VoiceGrievanceResponse)
-async def submit_voice_grievance(request: VoiceGrievanceSubmitRequest):
+async def submit_voice_grievance(
+    request: VoiceGrievanceSubmitRequest,
+    current_user: dict = Depends(_get_current_user()),
+):
     """Full voice grievance flow: extract → route → submit → acknowledge."""
     service = _get_service()
 
@@ -145,11 +237,11 @@ async def submit_voice_grievance(request: VoiceGrievanceSubmitRequest):
             text=request.transcription, language=request.language
         )
 
-        # 2. Route using the grievance system
-        department = "general"
-        priority = "medium"
-        category = grievance_data.category or "general"
-
+        # 2. Route using the grievance system. CRITICAL: do NOT silently
+        # fall back to ("general", "medium") on classification failure —
+        # that hides routing bugs and dumps high-priority grievances into
+        # the wrong queue. Surface a 422 so the citizen UI can prompt them
+        # to file via the regular web form.
         try:
             from src.api.dependencies import get_grievance_router as get_gr
             grievance_router_instance = get_gr()
@@ -157,12 +249,33 @@ async def submit_voice_grievance(request: VoiceGrievanceSubmitRequest):
                 grievance_text=grievance_data.description,
                 language=request.language,
             )
-            if route_result:
-                department = route_result.department.value if hasattr(route_result.department, 'value') else str(route_result.department)
-                priority = route_result.priority.value if hasattr(route_result.priority, 'value') else str(route_result.priority)
-                category = route_result.category.value if hasattr(route_result.category, 'value') else str(route_result.category)
+            if not route_result:
+                raise RuntimeError("router returned None")
+
+            department = (
+                route_result.department.value
+                if hasattr(route_result.department, "value")
+                else str(route_result.department)
+            )
+            priority = (
+                route_result.priority.value
+                if hasattr(route_result.priority, "value")
+                else str(route_result.priority)
+            )
+            category = (
+                route_result.category.value
+                if hasattr(route_result.category, "value")
+                else str(route_result.category)
+            )
         except Exception as route_err:
-            logger.warning(f"Grievance routing failed, using defaults: {route_err}")
+            logger.error(f"Voice grievance routing failed: {route_err}")
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "We couldn't auto-route your voice grievance. "
+                    "Please file via the web form so a human officer can assign it."
+                ),
+            )
 
         # 3. Save to database
         grievance_id = f"GR-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:5].upper()}"
@@ -206,6 +319,14 @@ async def submit_voice_grievance(request: VoiceGrievanceSubmitRequest):
                 tts_result = await service.tts.synthesize(
                     text=ack_text, language_code=request.language
                 )
+                # Acknowledgement audio is PII-bearing (mentions grievance ID
+                # and citizen-specific details). Register as private to the
+                # caller so /audio/<filename> ACL-checks against owner.
+                _register_audio_file(
+                    filename=tts_result.audio_path.name,
+                    owner_id=current_user.get("id") if current_user else None,
+                    scope="private",
+                )
                 ack_audio_url = f"/api/v1/nyayavaani/audio/{tts_result.audio_path.name}"
         except Exception as e:
             logger.warning(f"Acknowledgement generation failed: {e}")
@@ -232,9 +353,24 @@ async def submit_voice_grievance(request: VoiceGrievanceSubmitRequest):
 # ============================================================================
 
 @router.get("/audio/{filename}")
-async def serve_audio(filename: str):
-    """Serve generated audio files."""
-    if ".." in filename or "/" in filename or "\\" in filename:
+async def serve_audio(
+    filename: str,
+    current_user: dict = Depends(_get_current_user()),
+):
+    """Serve generated audio files. Requires authentication; enforces ACL.
+
+    Without this guard any authenticated user could iterate filenames and
+    listen to other citizens' grievance acknowledgements (PII leak).
+    """
+    # Path-traversal hardening: reject parent refs, separators, and any
+    # absolute-prefix indicators (Windows drive letters, leading slash).
+    if (
+        ".." in filename
+        or "/" in filename
+        or "\\" in filename
+        or filename.startswith(("~", "."))
+        or (len(filename) > 1 and filename[1] == ":")  # e.g. "C:..."
+    ):
         raise HTTPException(status_code=400, detail="Invalid filename")
 
     service = _get_service()
@@ -242,6 +378,26 @@ async def serve_audio(filename: str):
 
     if not audio_path.exists():
         raise HTTPException(status_code=404, detail="Audio file not found")
+
+    # ACL: public scope OR owner OR admin.
+    acl = _audio_file_acl(filename)
+    user_id = current_user.get("id") if current_user else None
+    user_role = current_user.get("role") if current_user else None
+
+    if acl is None:
+        # No row — file is older than the audit table or was created without
+        # registration. Default-deny for non-admins to keep the policy strict.
+        if user_role != "admin":
+            raise HTTPException(status_code=403, detail="Audio access denied")
+    else:
+        scope = acl.get("scope") or "private"
+        owner_id = acl.get("owner_id")
+        if not (
+            scope == "public"
+            or (owner_id is not None and owner_id == user_id)
+            or user_role == "admin"
+        ):
+            raise HTTPException(status_code=403, detail="Audio access denied")
 
     return FileResponse(
         path=str(audio_path),
@@ -320,6 +476,11 @@ async def get_notice_audio(notice_id: str, language: str = "hi"):
     # Cache
     import shutil
     shutil.copy2(str(tts_result.audio_path), str(cache_path))
+
+    # Notices are public — any citizen can stream them. Register both the
+    # raw TTS file and the cached copy so /audio/<name> can ACL-pass.
+    _register_audio_file(filename=tts_result.audio_path.name, owner_id=None, scope="public")
+    _register_audio_file(filename=cache_path.name, owner_id=None, scope="public")
 
     return FileResponse(path=str(cache_path), media_type="audio/wav")
 
@@ -527,6 +688,10 @@ async def get_scheme_audio(scheme_id: str, language: str = "hi"):
 
     import shutil
     shutil.copy2(str(result.audio_path), str(cache_path))
+
+    # Scheme summaries are public.
+    _register_audio_file(filename=result.audio_path.name, owner_id=None, scope="public")
+    _register_audio_file(filename=cache_path.name, owner_id=None, scope="public")
 
     return FileResponse(path=str(cache_path), media_type="audio/wav")
 

@@ -74,7 +74,9 @@ class RAGEngine:
         self.index_dir.mkdir(parents=True, exist_ok=True)
         self.model_cache_dir.mkdir(parents=True, exist_ok=True)
         
-        # File paths for persistence
+        # File paths for persistence. We persist metadata as JSON now (the
+        # retriever migrates legacy .pkl on first read), but keep the .pkl
+        # path so existing on-disk indexes still resolve.
         self.index_path = self.index_dir / "schemes_faiss.index"
         self.metadata_path = self.index_dir / "schemes_metadata.pkl"
         
@@ -122,20 +124,43 @@ class RAGEngine:
     def _build_index(self) -> None:
         """
         Build FAISS index from database.
-        
+
         Steps:
         1. Load and chunk all schemes from database
         2. Generate embeddings for all chunks
         3. Build FAISS index
         4. Persist to disk
+
+        On first deploy the schemes table is empty. We do NOT raise — we
+        log a WARNING and leave the retriever empty so the API server can
+        still come up. Citizens see "no results" instead of a 5xx, and ops
+        can ingest data without a redeploy.
         """
         # Step 1: Create chunks
         logger.info("Step 1/4: Creating chunks from database...")
         chunks_with_metadata = self.chunker.create_chunks()
-        
+
         if not chunks_with_metadata:
-            raise ValueError("No chunks created from database. Is database empty?")
-        
+            logger.warning(
+                "No chunks created from database — schemes table is empty. "
+                "Building EMPTY FAISS index so the server can start. "
+                "Ingest schemes and call rebuild_index() to populate."
+            )
+            # Build an empty IndexFlatIP so retrieve() returns [] cleanly
+            # rather than raising.
+            import numpy as np
+            dim = self.embedder.get_embedding_dim()
+            empty = np.zeros((0, dim), dtype=np.float32)
+            self.retriever.build_index(empty, [])
+            try:
+                self.retriever.save_index(
+                    str(self.index_path),
+                    str(self.metadata_path),
+                )
+            except Exception as e:
+                logger.warning(f"Could not persist empty index: {e}")
+            return
+
         # Separate texts and metadata
         chunk_texts = [text for text, _ in chunks_with_metadata]
         chunk_metadata = [meta for _, meta in chunks_with_metadata]
@@ -220,35 +245,79 @@ class RAGEngine:
     
     def add_to_index(self, text: str, metadata: dict) -> None:
         """
-        Add a new chunk to the existing FAISS index.
-        
-        Note: Currently stores chunks in database. Index rebuilds on next query.
+        Add a new chunk to the existing FAISS index AND persist to DB.
+
+        Previously this only wrote to the DB and relied on a future rebuild,
+        which meant queries silently missed newly-uploaded schemes until a
+        full reindex. Now we also embed the new chunk and append it to the
+        live FAISS index, then re-persist. We always log if the index update
+        fails so ops can run rebuild_index() to recover.
         """
         try:
-            logger.info(f"Processing chunk: {metadata.get('scheme_name')} - Chunk {metadata.get('chunk_index')}")
-            
-            # Store in database - the chunker will pick it up on next rebuild
+            logger.info(
+                f"Processing chunk: {metadata.get('scheme_name')} "
+                f"- Chunk {metadata.get('chunk_index')}"
+            )
+
+            # 1) Persist to schemes table so future rebuilds pick it up.
             import sqlite3
             conn = sqlite3.connect(str(self.db_path))
             cursor = conn.cursor()
-            
-            # Insert into schemes table
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO schemes (scheme_name, department, eligibility, benefits, process)
                 VALUES (?, ?, ?, ?, ?)
-            """, (
-                metadata.get('scheme_name', 'Unknown'),
-                metadata.get('department', 'General'),
-                text if metadata.get('section_type') == 'eligibility' else '',
-                text if metadata.get('section_type') == 'benefits' else '',
-                text if metadata.get('section_type') == 'process' else text
-            ))
-            
+                """,
+                (
+                    metadata.get('scheme_name', 'Unknown'),
+                    metadata.get('department', 'General'),
+                    text if metadata.get('section_type') == 'eligibility' else '',
+                    text if metadata.get('section_type') == 'benefits' else '',
+                    text if metadata.get('section_type') == 'process' else text,
+                ),
+            )
             conn.commit()
             conn.close()
-            
             logger.info("Chunk stored in database")
-            
+
+            # 2) Live-update FAISS so the next /query call sees the new data.
+            try:
+                import numpy as np
+                # Mirror chunker's metadata shape so retrieval-time consumers
+                # ('content', 'section_type', etc.) keep working.
+                live_metadata = {
+                    "scheme_name": metadata.get("scheme_name", "Unknown"),
+                    "department": metadata.get("department", "General"),
+                    "section_type": metadata.get("section_type", "process"),
+                    "chunk_id": metadata.get(
+                        "chunk_id",
+                        f"{metadata.get('scheme_name', 'unknown')}_{metadata.get('section_type', 'process')}",
+                    ),
+                    "content": text,
+                }
+                emb = self.embedder.embed_query(text).reshape(1, -1).astype(np.float32)
+
+                if self.retriever.index is None:
+                    # Cold index — build from this single chunk.
+                    self.retriever.build_index(emb, [live_metadata])
+                else:
+                    # Append in-place to the live index.
+                    self.retriever.index.add(emb)
+                    self.retriever.metadata.append(live_metadata)
+
+                # Persist so the next process restart isn't stale.
+                self.retriever.save_index(
+                    str(self.index_path),
+                    str(self.metadata_path),
+                )
+                logger.info("FAISS index live-updated and persisted")
+            except Exception as e:
+                logger.warning(
+                    "Live FAISS update failed: %s. Index is now stale — "
+                    "run rag_engine.rebuild_index() to recover.",
+                    e,
+                )
+
         except Exception as e:
             logger.warning(f"Failed to store chunk: {e} - continuing anyway")
             # Don't raise - allow upload to continue

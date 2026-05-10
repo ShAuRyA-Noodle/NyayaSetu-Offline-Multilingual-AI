@@ -11,11 +11,16 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Status-Production%20Ready-success?style=flat-square" />
-  <img src="https://img.shields.io/badge/Languages-12%20Indian-0D92F4?style=flat-square" />
+  <img src="https://img.shields.io/badge/UI-en%20%C2%B7%20hi-0D92F4?style=flat-square" />
+  <img src="https://img.shields.io/badge/Voice-12%20Indian%20languages-77CDFF?style=flat-square" />
   <img src="https://img.shields.io/badge/LLM-Groq%20%2B%20Ollama-blueviolet?style=flat-square" />
-  <img src="https://img.shields.io/badge/Voice-Sarvam%20AI-77CDFF?style=flat-square" />
   <img src="https://img.shields.io/badge/Endpoints-80%2B-informational?style=flat-square" />
   <img src="https://img.shields.io/badge/RAG-FAISS%20%2B%20Embeddings-orange?style=flat-square" />
+  <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" />
+</p>
+
+<p align="center">
+  <em>UI ships in English and Hindi. Voice (ASR / TTS / translation) supports 12 Indian languages via Sarvam AI.</em>
 </p>
 
 ---
@@ -36,7 +41,7 @@ India has 1.4 billion citizens, 22 official languages, and hundreds of dialects.
 
 ## The Solution
 
-NyayaSetu is an offline-capable, voice-native, multilingual AI platform that connects citizens to government schemes, grievance resolution, and official notices — in 12 Indian languages, even without internet.
+NyayaSetu is an offline-capable, voice-native, multilingual AI platform that connects citizens to government schemes, grievance resolution, and official notices. The web UI is bilingual (English + Hindi); the voice pipeline (ASR / TTS / translation) covers 12 Indian languages, even without internet.
 
 > An illiterate farmer in rural Rajasthan speaks into their phone in Hindi. The system transcribes it, understands it's a payment delay grievance, routes it to the Agriculture department, assigns priority and an SLA deadline, saves it, translates a confirmation back to Hindi, synthesizes it as audio, and plays it back. **One API call. Zero typing. No internet required.**
 
@@ -510,6 +515,36 @@ NyayaSetu/
 | Minimum | 4 cores | 8 GB | 15 GB | Development, basic testing |
 | Recommended | 8 cores | 16 GB | 25 GB | Production, full voice pipeline |
 | Optimal | 8+ cores + GPU | 32 GB | 30 GB | Max throughput, fast LLM inference |
+
+---
+
+## Deployment
+
+NyayaSetu deploys to a **$0/month** stack:
+
+- **Backend** — Hugging Face Spaces (Docker SDK, 16 GB RAM, persistent FS).
+- **Frontend** — Vercel (Hobby tier, edge-cached SPA).
+- **Database** — Neon Postgres (0.5 GB, 24 h point-in-time recovery).
+- **LLM** — Groq Cloud free tier (~14 400 req/day).
+- **Voice** — Web Speech API in-browser for live ASR/TTS; Sarvam Bulbul
+  server-side for cached notice narration.
+- **Edge / WAF** — Cloudflare proxied DNS + Turnstile.
+- **Uptime** — UptimeRobot. **Errors** — Sentry (free tier).
+
+Step-by-step instructions live in **[DEPLOYMENT.md](DEPLOYMENT.md)**.
+The architecture diagram and rationale are in
+**[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**. Day-2 operations
+(backups, recovery, common 5xxs) are in
+**[docs/RUNBOOK.md](docs/RUNBOOK.md)**.
+
+---
+
+## Project meta
+
+- **License** — [Apache 2.0](LICENSE).
+- **Security** — please report vulnerabilities privately, see [SECURITY.md](SECURITY.md).
+- **Contributing** — branch / commit conventions and PR process in [CONTRIBUTING.md](CONTRIBUTING.md).
+- **Changelog** — release history in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 

@@ -11,29 +11,45 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# 10 MB of *text* (not file size) — past this we stop reading and warn.
+# Real govt PDFs that exceed this cap are typically scanned-image bundles
+# that should be OCR-routed, not loaded directly into the embedder.
+MAX_EXTRACTED_CHARS = 10 * 1024 * 1024  # 10 MB of text
+
+
 class DocumentProcessor:
     """Process uploaded documents and extract text"""
-    
+
     def extract_text(self, file_path: str, filename: str) -> str:
         """
         Extract text from uploaded file
-        
+
         Args:
             file_path: Path to the file
             filename: Name of the file (to determine type)
-            
+
         Returns:
-            Extracted text as string
+            Extracted text as string (capped at MAX_EXTRACTED_CHARS).
         """
         try:
             if filename.endswith('.pdf'):
-                return self._extract_from_pdf(file_path)
+                text = self._extract_from_pdf(file_path)
             elif filename.endswith('.docx'):
-                return self._extract_from_docx(file_path)
+                text = self._extract_from_docx(file_path)
             elif filename.endswith('.txt'):
-                return self._extract_from_txt(file_path)
+                text = self._extract_from_txt(file_path)
             else:
                 raise ValueError(f"Unsupported file type: {filename}")
+
+            # OOM guard. Capping is preferable to dying mid-embed and losing
+            # the rest of the upload batch.
+            if len(text) > MAX_EXTRACTED_CHARS:
+                logger.warning(
+                    "Extracted text from %s exceeds cap (%d > %d chars). Truncating.",
+                    filename, len(text), MAX_EXTRACTED_CHARS,
+                )
+                text = text[:MAX_EXTRACTED_CHARS]
+            return text
         except Exception as e:
             logger.error(f"Error extracting text from {filename}: {e}")
             raise

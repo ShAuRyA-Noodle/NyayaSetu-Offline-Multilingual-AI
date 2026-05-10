@@ -25,6 +25,8 @@ from src.modules.grievance_router import GrievanceRouter
 from src.modules.nyayavaani.startup import NyayaVaaniService
 from src.modules.nyayavaani.config import NyayaVaaniConfig
 
+from .settings import get_settings  # exposed for other modules
+
 logger = logging.getLogger(__name__)
 
 
@@ -65,10 +67,18 @@ async def initialize_services():
         Exception: If any service fails to initialize
     """
     global _app_state
-    
+
+    # Fail fast in production if required env vars are missing/invalid.
+    _settings = get_settings()
+    _missing = _settings.validate_production()
+    if _missing:
+        raise RuntimeError(
+            f"Missing required env vars in production: {', '.join(_missing)}"
+        )
+
     try:
         logger.info("Initializing services...")
-        
+
         # 1. Initialize RAG Engine
         logger.info("1/6 Initializing RAG Engine...")
         _app_state.rag_engine = RAGEngine(

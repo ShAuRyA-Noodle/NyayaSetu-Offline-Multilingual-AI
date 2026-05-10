@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Play, Pause, Volume2, Loader2 } from 'lucide-react';
+import { Play, Pause, Volume2, Loader2, AlertTriangle } from 'lucide-react';
+import apiService from '../../services/api';
 
 interface AudioPlayerProps {
   src: string;
@@ -15,7 +16,69 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, label, compact = false, 
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+
+  const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8001';
+
+  // Fetch the audio via the authenticated axios client and convert to a blob URL.
+  // <audio src> cannot send Authorization headers; without this, every authed
+  // audio fetch returns 401.
+  useEffect(() => {
+    let cancelled = false;
+    let createdUrl: string | null = null;
+
+    const load = async () => {
+      if (!src) return;
+      setError(null);
+      setLoading(true);
+
+      // Build the path/url to fetch. axios is configured with baseURL = apiBase;
+      // pass relative paths through, absolute http(s) urls as-is.
+      const isAbsolute = /^https?:\/\//i.test(src);
+      const requestUrl = isAbsolute ? src : src;
+
+      try {
+        const response = await apiService.client.get<Blob>(requestUrl, {
+          responseType: 'blob',
+          // For absolute URLs, override baseURL so axios doesn't prefix it.
+          baseURL: isAbsolute ? undefined : apiBase,
+          timeout: 60000,
+        });
+
+        if (cancelled) return;
+        const url = URL.createObjectURL(response.data);
+        createdUrl = url;
+        setBlobUrl(url);
+        setLoading(false);
+      } catch (err: any) {
+        if (cancelled) return;
+        // eslint-disable-next-line no-console
+        console.error('AudioPlayer fetch failed:', err);
+        setError(
+          err?.response?.status === 401
+            ? 'Authentication required'
+            : 'Failed to load audio'
+        );
+        setLoading(false);
+      }
+    };
+
+    load();
+
+    return () => {
+      cancelled = true;
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
+    };
+  }, [src, apiBase]);
+
+  // Revoke the blob URL on unmount / src change to avoid leaks
+  useEffect(() => {
+    return () => {
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -27,60 +90,50 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, label, compact = false, 
     };
     const onLoadedMetadata = () => {
       setDuration(audio.duration);
-      setLoading(false);
     };
     const onEnded = () => { setPlaying(false); setProgress(0); };
-    const onCanPlay = () => setLoading(false);
-    const onWaiting = () => { if (playing) setLoading(true); };
-    const onError = () => { setLoading(false); setPlaying(false); setError(true); };
+    const onPlayEvt = () => setPlaying(true);
+    const onPauseEvt = () => setPlaying(false);
+    const onErrorEvt = () => { setPlaying(false); setError('Playback failed'); };
 
     audio.addEventListener('timeupdate', onTimeUpdate);
     audio.addEventListener('loadedmetadata', onLoadedMetadata);
     audio.addEventListener('ended', onEnded);
-    audio.addEventListener('canplay', onCanPlay);
-    audio.addEventListener('waiting', onWaiting);
-    audio.addEventListener('error', onError);
+    audio.addEventListener('play', onPlayEvt);
+    audio.addEventListener('pause', onPauseEvt);
+    audio.addEventListener('error', onErrorEvt);
 
     return () => {
       audio.removeEventListener('timeupdate', onTimeUpdate);
       audio.removeEventListener('loadedmetadata', onLoadedMetadata);
       audio.removeEventListener('ended', onEnded);
-      audio.removeEventListener('canplay', onCanPlay);
-      audio.removeEventListener('waiting', onWaiting);
-      audio.removeEventListener('error', onError);
+      audio.removeEventListener('play', onPlayEvt);
+      audio.removeEventListener('pause', onPauseEvt);
+      audio.removeEventListener('error', onErrorEvt);
     };
-  }, [src, playing]);
+  }, [blobUrl]);
 
   // Reset state when src changes
   useEffect(() => {
     setPlaying(false);
-    setLoading(false);
     setProgress(0);
     setCurrentTime(0);
     setDuration(0);
-    setError(false);
   }, [src]);
 
   const togglePlay = () => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || !blobUrl) return;
 
     if (playing) {
       audio.pause();
-      setPlaying(false);
-      setLoading(false);
     } else {
-      setError(false);
       // Pause other audio elements
       document.querySelectorAll('audio').forEach((a) => {
         if (a !== audio) a.pause();
       });
-      setLoading(true);
-      audio.play().then(() => {
-        setPlaying(true);
-      }).catch(() => {
-        setLoading(false);
-        setError(true);
+      audio.play().catch(() => {
+        setError('Playback failed');
       });
     }
   };
@@ -98,16 +151,14 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, label, compact = false, 
     return `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
   };
 
-  const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8001';
-  const fullSrc = src.startsWith('http') ? src : `${apiBase}${src}`;
-
   if (compact) {
     return (
       <div className={`inline-flex items-center gap-2 ${className}`}>
-        <audio ref={audioRef} src={fullSrc} preload="none" />
+        {blobUrl && <audio ref={audioRef} src={blobUrl} preload="auto" />}
         <button
           onClick={togglePlay}
-          disabled={loading}
+          disabled={loading || !!error || !blobUrl}
+          aria-label={playing ? 'Pause audio' : 'Play audio'}
           className={`w-8 h-8 rounded-full ${
             error
               ? 'bg-red-400'
@@ -116,6 +167,8 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, label, compact = false, 
         >
           {loading ? (
             <Loader2 size={14} className="animate-spin" />
+          ) : error ? (
+            <AlertTriangle size={14} />
           ) : playing ? (
             <Pause size={14} />
           ) : (
@@ -123,7 +176,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, label, compact = false, 
           )}
         </button>
         <span className="text-xs text-gray-500">
-          {loading ? 'Generating audio...' : error ? 'Failed to load' : label || ''}
+          {loading ? 'Loading audio...' : error ? error : label || ''}
         </span>
       </div>
     );
@@ -131,11 +184,12 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, label, compact = false, 
 
   return (
     <div className={`bg-white/50 dark:bg-white/5 rounded-xl p-3 border border-white/20 dark:border-white/10 ${className}`}>
-      <audio ref={audioRef} src={fullSrc} preload="none" />
+      {blobUrl && <audio ref={audioRef} src={blobUrl} preload="auto" />}
       <div className="flex items-center gap-3">
         <button
           onClick={togglePlay}
-          disabled={loading}
+          disabled={loading || !!error || !blobUrl}
+          aria-label={playing ? 'Pause audio' : 'Play audio'}
           className={`w-10 h-10 rounded-full ${
             error
               ? 'bg-red-400'
@@ -144,6 +198,8 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, label, compact = false, 
         >
           {loading ? (
             <Loader2 size={18} className="animate-spin" />
+          ) : error ? (
+            <AlertTriangle size={18} />
           ) : playing ? (
             <Pause size={18} />
           ) : (
@@ -154,12 +210,17 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ src, label, compact = false, 
         <div className="flex-1 min-w-0">
           {label && (
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate mb-1">
-              {loading ? 'Generating audio...' : error ? 'Failed to load audio' : label}
+              {loading ? 'Loading audio...' : error ? error : label}
             </p>
           )}
           <div
             className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full cursor-pointer"
             onClick={handleSeek}
+            role="slider"
+            aria-label="Audio progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(progress)}
           >
             <div
               className="h-full bg-gradient-to-r from-saffron-500 to-orange-500 rounded-full transition-all"

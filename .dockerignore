@@ -41,9 +41,6 @@ desktop.ini
 desktop/
 mobile/
 
-# --- Empty or stale backend placeholder ---
-backend/
-
 # --- Runtime data (replaced by Postgres / regenerated) ---
 data/governance.db
 data/governance.db-*
@@ -80,3 +77,25 @@ translation_models/
 # --- Temp ---
 temp/
 tmp/
+
+# --- Models / large artifacts (HF Spaces persistent FS handles caching) ---
+models/
+**/models--*/
+translation_models/
+data/*.index
+data/*.pkl
+data/*.bin
+
+# --- Skill / agent metadata ---
+.agents/
+skills-lock.json
+
+# --- Frontend build deps (HF Spaces only runs the backend image) ---
+node_modules/
+**/node_modules/
+
+# --- Docs and markdown not needed at runtime (HF Spaces README is the exception) ---
+docs/
+.github/
+*.md
+!docs/HF_SPACES_README.md

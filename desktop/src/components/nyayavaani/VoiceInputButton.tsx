@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Mic, Square, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
+import apiService from '../../services/api';
 
 interface VoiceInputButtonProps {
   onTranscription: (text: string, language: string) => void;
@@ -136,26 +135,20 @@ const VoiceInputButton: React.FC<VoiceInputButtonProps> = ({
           fd.append('audio', blob, 'recording.webm');
           if (languageHint) fd.append('language_hint', languageHint);
 
-          const response = await fetch(`${API_BASE_URL}/api/v1/nyayavaani/transcribe`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-            body: fd,
-          });
-
-          if (!response.ok) {
-            const errData = await response.json().catch(() => ({}));
-            throw new Error(errData.detail || `Server error ${response.status}`);
-          }
-
-          const data = await response.json();
-          if (data.text?.trim()) {
+          const data = await apiService.transcribeAudio(fd);
+          if (data?.text?.trim()) {
             onTranscription(data.text.trim(), data.language || 'auto');
           } else {
             setError('Could not detect speech. Try again.');
           }
         } catch (err: any) {
           console.error('Transcription error:', err);
-          setError(err.message || 'Transcription failed');
+          const detail = err?.response?.data?.detail;
+          setError(
+            (typeof detail === 'string' ? detail : null) ||
+              err?.message ||
+              'Transcription failed'
+          );
         }
         setState('idle');
         setDuration(0);

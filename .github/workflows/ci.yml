@@ -1,0 +1,131 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Backend: parity test against a real Postgres + (optional) smoke test.
+  # ---------------------------------------------------------------------------
+  backend:
+    name: backend (python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11"]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nyaya
+          POSTGRES_PASSWORD: nyaya
+          POSTGRES_DB: nyayasetu_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nyaya -d nyayasetu_ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://nyaya:nyaya@localhost:5432/nyayasetu_ci
+      JWT_SECRET_KEY: ci-only-not-a-real-secret
+      ENV: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # CPU-only torch first to avoid the CUDA pull
+          pip install --extra-index-url https://download.pytorch.org/whl/cpu \
+              torch==2.8.0 torchvision==0.23.0
+          pip install -r requirements.txt
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U nyaya; then
+              echo "postgres is up"; exit 0
+            fi
+            sleep 2
+          done
+          echo "postgres did not come up"; exit 1
+
+      - name: DB parity test (SQLite vs Postgres)
+        run: python tests/test_db_parity.py
+
+      - name: Smoke test (CI-mock only, skipped if flag absent)
+        run: |
+          if python scripts/smoke_test.py --help 2>&1 | grep -q -- '--ci-mock'; then
+            python scripts/smoke_test.py --ci-mock
+          else
+            echo "smoke_test.py has no --ci-mock flag; skipping in CI."
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Frontend: type-check and Vite build the SPA bundle that Vercel ships.
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: frontend (node 20)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build (web)
+        run: npm run build:web
+        env:
+          VITE_API_URL: https://example.invalid
+
+  # ---------------------------------------------------------------------------
+  # Docker: ensure the multi-stage Dockerfile builds cleanly. We do not push.
+  # ---------------------------------------------------------------------------
+  docker:
+    name: docker build (no push)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: false
+          tags: nyayasetu-backend:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

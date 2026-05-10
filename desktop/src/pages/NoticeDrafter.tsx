@@ -9,6 +9,8 @@ import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
 import PageTransition from '../components/ui/PageTransition';
 import ThemedSpinner from '../components/ui/ThemedSpinner';
+import AIDisclaimerBanner from '../components/ui/AIDisclaimerBanner';
+import { useDialog } from '../components/ui/ConfirmDialog';
 import toast from 'react-hot-toast';
 import apiService from '../services/api';
 
@@ -273,8 +275,11 @@ const GenerateTab: React.FC = () => {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5 }}
-            className="village-card rounded-xl overflow-hidden"
+            className="space-y-3"
           >
+            {/* AI disclaimer above the AI-generated notice draft */}
+            <AIDisclaimerBanner storageKey="ai-disclaimer-notice-draft" />
+            <div className="village-card rounded-xl overflow-hidden">
             <div className="bg-gradient-to-r from-mitti-500 to-haldi-500 px-5 py-3 text-white flex items-center justify-between">
               <h2 className="font-semibold flex items-center"><FileText className="w-5 h-5 mr-2" />{t('notices.formattedNotice', 'Generated Notice')}</h2>
               <button onClick={handleCopy} className="px-3 py-1 bg-white/20 rounded-lg text-sm hover:bg-mitti-100/50 flex items-center transition-all">
@@ -305,6 +310,7 @@ const GenerateTab: React.FC = () => {
               >
                 {saving ? <ThemedSpinner /> : saved ? (<><CheckCircle className="w-4 h-4" /><span>{t('notices.saveDraft', 'Saved!')}</span></>) : (<><Send className="w-4 h-4" /><span>{t('notices.saveDraft', 'Save as Draft')}</span></>)}
               </motion.button>
+            </div>
             </div>
           </motion.div>
         ) : (
@@ -540,6 +546,9 @@ const DraftsTab: React.FC = () => {
   const [editingNotice, setEditingNotice] = useState<any>(null);
   const [viewingNotice, setViewingNotice] = useState<any>(null);
   const [publishing, setPublishing] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(25);
+  const PAGE_SIZE = 25;
+  const { confirm, ConfirmHost } = useDialog();
 
   useEffect(() => { loadDrafts(); }, []);
 
@@ -553,7 +562,13 @@ const DraftsTab: React.FC = () => {
   };
 
   const handlePublish = async (noticeId: string) => {
-    if (!confirm('Publish this notice directly to the Public Board?')) return;
+    const ok = await confirm({
+      title: 'Publish this notice?',
+      message: 'Publishing will make this notice visible on the Public Board immediately.',
+      confirmText: 'Publish',
+      tone: 'warning',
+    });
+    if (!ok) return;
     setPublishing(noticeId);
     try {
       await apiService.publishNotice(noticeId);
@@ -575,7 +590,13 @@ const DraftsTab: React.FC = () => {
   };
 
   const handleDelete = async (noticeId: string) => {
-    if (!confirm('Delete this draft?')) return;
+    const ok = await confirm({
+      title: 'Delete this draft?',
+      message: 'This draft will be permanently removed and cannot be recovered.',
+      confirmText: 'Delete',
+      tone: 'danger',
+    });
+    if (!ok) return;
     try {
       await apiService.deleteNotice(noticeId);
       loadDrafts();
@@ -599,10 +620,13 @@ const DraftsTab: React.FC = () => {
     </motion.div>
   );
 
+  const visibleNotices = notices.slice(0, visibleCount);
+  const hasMore = notices.length > visibleNotices.length;
+
   return (
     <>
       <div className="space-y-4">
-        {notices.map((n: any, index: number) => (
+        {visibleNotices.map((n: any, index: number) => (
           <motion.div
             key={n.notice_id}
             initial={{ opacity: 0, y: 20 }}
@@ -669,10 +693,24 @@ const DraftsTab: React.FC = () => {
         ))}
       </div>
 
+      {hasMore && (
+        <div className="flex justify-center mt-4">
+          <button
+            type="button"
+            onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+            className="px-5 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm font-medium text-kora-100 hover:bg-white/[0.06] transition-colors"
+          >
+            Show more <span className="text-slate-500 ml-1">({notices.length - visibleNotices.length} remaining)</span>
+          </button>
+        </div>
+      )}
+
       <AnimatePresence>
         {viewingNotice && <ViewModal notice={viewingNotice} onClose={() => setViewingNotice(null)} />}
         {editingNotice && <EditModal notice={editingNotice} onClose={() => setEditingNotice(null)} onSaved={() => { setEditingNotice(null); loadDrafts(); }} />}
       </AnimatePresence>
+
+      <ConfirmHost />
     </>
   );
 };
@@ -873,6 +911,9 @@ const PublishedTab: React.FC = () => {
   const [notices, setNotices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewingNotice, setViewingNotice] = useState<any>(null);
+  const [visibleCount, setVisibleCount] = useState(25);
+  const PAGE_SIZE = 25;
+  const { prompt: dialogPrompt, ConfirmHost } = useDialog();
 
   useEffect(() => { loadPublished(); }, []);
 
@@ -886,7 +927,15 @@ const PublishedTab: React.FC = () => {
   };
 
   const handleWithdraw = async (noticeId: string) => {
-    const reason = prompt('Reason for withdrawal:');
+    const reason = await dialogPrompt({
+      title: 'Withdraw published notice?',
+      message: 'Provide a reason — citizens who have already viewed this notice may be informed of the withdrawal.',
+      placeholder: 'Reason for withdrawal',
+      multiline: true,
+      required: true,
+      confirmText: 'Withdraw',
+      tone: 'danger',
+    });
     if (!reason) return;
     try {
       await apiService.withdrawNotice(noticeId, reason);
@@ -911,10 +960,13 @@ const PublishedTab: React.FC = () => {
     </motion.div>
   );
 
+  const visiblePublished = notices.slice(0, visibleCount);
+  const hasMorePublished = notices.length > visiblePublished.length;
+
   return (
     <>
       <div className="space-y-4">
-        {notices.map((n: any, index: number) => (
+        {visiblePublished.map((n: any, index: number) => (
           <motion.div
             key={n.notice_id}
             initial={{ opacity: 0, y: 20 }}
@@ -947,9 +999,23 @@ const PublishedTab: React.FC = () => {
         ))}
       </div>
 
+      {hasMorePublished && (
+        <div className="flex justify-center mt-4">
+          <button
+            type="button"
+            onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+            className="px-5 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm font-medium text-kora-100 hover:bg-white/[0.06] transition-colors"
+          >
+            Show more <span className="text-slate-500 ml-1">({notices.length - visiblePublished.length} remaining)</span>
+          </button>
+        </div>
+      )}
+
       <AnimatePresence>
         {viewingNotice && <ViewModal notice={viewingNotice} onClose={() => setViewingNotice(null)} />}
       </AnimatePresence>
+
+      <ConfirmHost />
     </>
   );
 };

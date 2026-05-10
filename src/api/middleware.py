@@ -4,13 +4,69 @@ API Middleware
 Request logging, rate limiting, and security headers.
 """
 
+import os
 import time
+import ipaddress
 import logging
 from collections import defaultdict
+from typing import List, Optional
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# CLIENT IP RESOLUTION (X-Forwarded-For aware)
+# ============================================================================
+
+def _parse_trusted_proxies() -> List:
+    """Parse TRUSTED_PROXIES env var into a list of ip_network objects."""
+    raw = os.environ.get("TRUSTED_PROXIES", "").strip()
+    if not raw:
+        return []
+    nets = []
+    for entry in raw.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        try:
+            # Allow plain IP or CIDR
+            if "/" not in entry:
+                entry = f"{entry}/32" if ":" not in entry else f"{entry}/128"
+            nets.append(ipaddress.ip_network(entry, strict=False))
+        except ValueError:
+            logger.warning(f"Ignoring invalid TRUSTED_PROXIES entry: {entry}")
+    return nets
+
+
+_TRUSTED_PROXIES = _parse_trusted_proxies()
+
+
+def _is_trusted_proxy(ip_str: Optional[str]) -> bool:
+    if not ip_str or not _TRUSTED_PROXIES:
+        return False
+    try:
+        ip = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return False
+    return any(ip in net for net in _TRUSTED_PROXIES)
+
+
+def get_client_ip(request: Request) -> Optional[str]:
+    """Resolve the real client IP, respecting X-Forwarded-For only when the
+    direct peer is a trusted proxy (TRUSTED_PROXIES env var, comma-separated
+    CIDRs). Otherwise falls back to request.client.host.
+    """
+    direct_peer = request.client.host if request.client else None
+    if _is_trusted_proxy(direct_peer):
+        xff = request.headers.get("x-forwarded-for")
+        if xff:
+            # Leftmost entry is the original client.
+            leftmost = xff.split(",")[0].strip()
+            if leftmost:
+                return leftmost
+    return direct_peer
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
@@ -42,13 +98,37 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add security headers to all responses."""
 
+    # Safe defaults: no inline scripts, no eval, allow self + Groq endpoints
+    # for fetch (front-end occasionally calls Groq directly during voice flows).
+    _CSP = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "font-src 'self' data:; "
+        "media-src 'self' blob:; "
+        "connect-src 'self' https://api.groq.com https://api.sarvam.ai; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "object-src 'none'"
+    )
+
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Permissions-Policy"] = (
+            "microphone=(self), camera=(), geolocation=()"
+        )
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains; preload"
+        )
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        response.headers["Content-Security-Policy"] = self._CSP
+        # Note: X-XSS-Protection deliberately removed (deprecated, can be
+        # harmful on legacy browsers). Modern browsers rely on CSP instead.
         return response
 
 
@@ -67,7 +147,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         }
 
     async def dispatch(self, request: Request, call_next):
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip = get_client_ip(request) or "unknown"
         path = request.url.path
         now = time.time()
 

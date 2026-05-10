@@ -1,6 +1,11 @@
 # =============================================================================
 # NyayaSetu Local Dev / Test Stack
 #
+# *** LOCAL DEV ONLY ***
+# Production runs on Neon (Postgres) + Hugging Face Spaces (backend, Docker SDK)
+# + Vercel (frontend). This compose file is for local parity testing only;
+# do NOT deploy it as-is.
+#
 # Usage:
 #   1. Start Postgres for local Neon-like testing:
 #        docker-compose up -d postgres
@@ -9,7 +14,11 @@
 #      (or PowerShell: $env:DATABASE_URL = "postgresql://nyaya:nyaya@localhost:5433/nyayasetu")
 #   3. Run the backend normally:
 #        python -m uvicorn src.api.app:app --host 0.0.0.0 --port 8001 --reload
-#   4. To wipe data and start fresh:
+#   4. To run the dockerized backend (HF Spaces parity test):
+#        docker-compose --profile backend up
+#   5. To run the Vite preview frontend alongside (web profile):
+#        docker-compose --profile web up
+#   6. To wipe data and start fresh:
 #        docker-compose down -v
 # =============================================================================
 
@@ -61,6 +70,21 @@ services:
       # Mount FAISS + models as read-only so Docker matches production
       - ./data:/app/data:ro
       - ./models:/app/models:ro
+
+  # Optional: serve the built Vite SPA locally (parity test for Vercel).
+  # Enable with: docker-compose --profile web up
+  frontend:
+    profiles: ["web"]
+    image: node:20-alpine
+    container_name: nyaya_frontend
+    working_dir: /app
+    command: sh -c "npm ci --legacy-peer-deps && npm run build:web && npx --yes vite preview --host 0.0.0.0 --port 4173"
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8001}
+    ports:
+      - "4173:4173"
+    volumes:
+      - ./desktop:/app
 
 volumes:
   postgres_data:

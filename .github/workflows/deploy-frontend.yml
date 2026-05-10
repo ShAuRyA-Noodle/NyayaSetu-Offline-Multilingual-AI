@@ -1,0 +1,46 @@
+name: Deploy frontend (Vercel webhook)
+
+# This workflow simply pings a Vercel deploy hook URL. The actual build
+# happens on Vercel's infrastructure — we don't run `npm run build` here
+# and we don't authenticate with a Vercel token.
+#
+# Setup steps (one-time):
+#   1. In the Vercel project ▸ Settings ▸ Git ▸ Deploy Hooks, create a
+#      new hook (e.g. "main → production"). Copy the URL.
+#   2. In this GitHub repo ▸ Settings ▸ Secrets and variables ▸ Actions,
+#      add a secret named `VERCEL_DEPLOY_HOOK_URL` with that URL as the
+#      value.
+#
+# The hook URL itself contains the project + branch token, so no further
+# auth is required.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "desktop/**"
+      - ".github/workflows/deploy-frontend.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-frontend
+  cancel-in-progress: true
+
+jobs:
+  trigger:
+    name: trigger Vercel deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping deploy hook
+        env:
+          HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "${HOOK_URL}" ]; then
+            echo "VERCEL_DEPLOY_HOOK_URL is not set; skipping."
+            exit 0
+          fi
+          # POST with no body — Vercel's deploy hook just needs to be hit.
+          # `--fail` so a non-2xx response fails the job.
+          curl --fail --silent --show-error -X POST "${HOOK_URL}" -o /tmp/vercel.out
+          echo "Vercel response:"
+          cat /tmp/vercel.out

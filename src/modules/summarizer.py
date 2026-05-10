@@ -15,11 +15,13 @@ import hashlib
 import json
 import logging
 
-# Import QueryIntent enum (handle different import contexts)
+import cachetools
+
+# Import QueryIntent + sanitizer (handle different import contexts)
 try:
-    from ..generation.prompt_templates import QueryIntent
+    from ..generation.prompt_templates import QueryIntent, sanitize_user_input
 except ImportError:
-    from generation.prompt_templates import QueryIntent
+    from generation.prompt_templates import QueryIntent, sanitize_user_input
 
 # Type aliases for clarity
 Language = Literal["en", "hi"]
@@ -264,9 +266,11 @@ Be concise, factual, and extract only information present in the scheme data. Do
         """
         self.rag_engine = rag_engine
         self.answer_generator = answer_generator
-        self._cache: Dict[str, SchemeSummary] = {}
-        
-        logger.info("SchemeSummarizer initialized")
+        # Bounded cache — was an unbounded dict which leaked memory under
+        # any non-trivial query volume.
+        self._cache: "cachetools.LRUCache[str, SchemeSummary]" = cachetools.LRUCache(maxsize=500)
+
+        logger.info("SchemeSummarizer initialized (LRU cache size=500)")
     
     def summarize(
         self,
@@ -300,9 +304,14 @@ Be concise, factual, and extract only information present in the scheme data. Do
         # Input validation
         if not scheme_name or not scheme_name.strip():
             raise ValueError("scheme_name cannot be empty")
-        
-        scheme_name = scheme_name.strip()
-        
+
+        # Sanitize the citizen-supplied scheme name before it ever flows
+        # into LLM prompts. Prevents prompt-injection via crafted scheme
+        # names like "PM-KISAN ### IGNORE ABOVE...".
+        scheme_name = sanitize_user_input(scheme_name.strip(), max_len=200)
+        if not scheme_name:
+            raise ValueError("scheme_name cannot be empty after sanitization")
+
         # Check cache for deterministic output
         cache_key = self._generate_cache_key(scheme_name, language)
         if cache_key in self._cache:
@@ -474,15 +483,19 @@ Be concise, factual, and extract only information present in the scheme data. Do
             Formatted context string
         """
         context_parts = []
-        
-        for score, metadata, explanation in retrieved_chunks:
+
+        for _score, metadata, explanation in retrieved_chunks:
             section_type = metadata.get("section_type", "general")
-            content = metadata.get("content", explanation)
-            
+            # Chunker now embeds the actual chunk text in metadata['content'].
+            # Fall back to the human-readable banner string if (somehow) it's
+            # missing — but this is the bug fix path that was previously
+            # reading the wrong field.
+            content = metadata.get("content") or explanation
+
             context_parts.append(
                 f"[{section_type.upper()}]\n{content}\n"
             )
-        
+
         return "\n".join(context_parts)
     
     def _parse_llm_response(self, response: Any) -> Dict[str, Any]:

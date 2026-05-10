@@ -6,19 +6,28 @@ into 768-dimensional vectors that capture semantic meaning.
 Supports both Hindi and English queries.
 """
 
+import os
 import numpy as np
 from typing import List
 import logging
 from pathlib import Path
 
-# Import sentence-transformers (graceful fallback if unavailable)
+# Import sentence-transformers. We do NOT silently degrade to zero-vectors:
+# zero embeddings produce arbitrary FAISS hits and silently corrupt RAG.
+# If the dep is missing or fails to load, we keep the import-time flag and
+# raise loudly the first time someone actually tries to embed.
 try:
     from sentence_transformers import SentenceTransformer
     _HAS_SENTENCE_TRANSFORMERS = True
-except (ImportError, Exception) as e:
+    _SENTENCE_TRANSFORMERS_IMPORT_ERROR: BaseException | None = None
+except (ImportError, Exception) as e:  # noqa: BLE001
     SentenceTransformer = None  # type: ignore
     _HAS_SENTENCE_TRANSFORMERS = False
-    logging.warning(f"sentence-transformers unavailable: {e}. Embedding features will be disabled.")
+    _SENTENCE_TRANSFORMERS_IMPORT_ERROR = e
+    logging.warning(
+        f"sentence-transformers unavailable: {e}. "
+        "Embedding calls will RAISE rather than return zero vectors."
+    )
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

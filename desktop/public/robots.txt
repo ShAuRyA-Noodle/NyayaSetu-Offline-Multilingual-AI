@@ -1,0 +1,37 @@
+# robots.txt for NyayaSetu (न्यायसेतु)
+# Public pages are crawlable; authenticated app surface is excluded.
+
+User-agent: *
+Allow: /
+Allow: /privacy
+Allow: /terms
+Allow: /public/schemes
+Allow: /login
+Allow: /forgot-password
+
+# Authenticated application — never crawl
+Disallow: /admin
+Disallow: /admin/
+Disallow: /department
+Disallow: /department/
+Disallow: /dashboard
+Disallow: /dashboard/
+Disallow: /grievances
+Disallow: /grievances/
+Disallow: /notices
+Disallow: /notices/
+Disallow: /settings
+Disallow: /settings/
+Disallow: /chat
+Disallow: /chat/
+Disallow: /nyayavaani
+Disallow: /nyayavaani/
+
+# API surface
+Disallow: /api/
+
+# Reset-password tokens contain a one-time secret in the path; never crawl.
+Disallow: /reset-password/
+
+# TODO: Replace with the production hostname once known.
+Sitemap: https://your-domain.example/sitemap.xml

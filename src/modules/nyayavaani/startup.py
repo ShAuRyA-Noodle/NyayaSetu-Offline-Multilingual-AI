@@ -4,6 +4,8 @@ NyayaVaani startup — health checks, model verification, background cleanup.
 
 import asyncio
 import logging
+import time
+from pathlib import Path
 from typing import Optional
 
 import httpx
@@ -16,6 +18,66 @@ from .intent_engine import IntentEngine
 from .audio_utils import cleanup_old_audio
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Split-retention helpers for the audio output directory.
+#
+# `audio_utils.cleanup_old_audio` is generic — applies one age threshold to
+# every file in a directory. The output directory holds two classes of file
+# with very different lifecycles:
+#
+#   - `notice_*.wav` and `scheme_summary_*.wav`   → public caches, 30-day TTL
+#   - everything else                            → per-request TTS, 2-hour TTL
+#
+# These helpers narrow the scope so each class gets the correct retention.
+# ---------------------------------------------------------------------------
+
+_LONG_LIVED_PREFIXES = ("notice_", "scheme_summary_")
+
+
+def _cleanup_output_short(directory: Path, max_age_hours: int) -> int:
+    """Delete short-lived TTS output (NOT notice_/scheme_summary_)."""
+    if not directory.exists():
+        return 0
+    cutoff = time.time() - (max_age_hours * 3600)
+    deleted = 0
+    for f in directory.iterdir():
+        if not f.is_file():
+            continue
+        if f.name.startswith(_LONG_LIVED_PREFIXES):
+            continue
+        if f.stat().st_mtime < cutoff:
+            try:
+                f.unlink()
+                deleted += 1
+            except OSError:
+                pass
+    if deleted:
+        logger.info(f"Short-retention cleanup removed {deleted} files from {directory}")
+    return deleted
+
+
+def _cleanup_output_long(directory: Path, max_age_hours: int) -> int:
+    """Delete long-lived public caches (notice_/scheme_summary_) past TTL."""
+    if not directory.exists():
+        return 0
+    cutoff = time.time() - (max_age_hours * 3600)
+    deleted = 0
+    for f in directory.iterdir():
+        if not f.is_file():
+            continue
+        if not f.name.startswith(_LONG_LIVED_PREFIXES):
+            continue
+        if f.stat().st_mtime < cutoff:
+            try:
+                f.unlink()
+                deleted += 1
+            except OSError:
+                pass
+    if deleted:
+        logger.info(f"Long-retention cleanup removed {deleted} cached files from {directory}")
+    return deleted
 
 
 class NyayaVaaniService:
@@ -141,12 +203,37 @@ class NyayaVaaniService:
             self._ollama_models = []
 
     async def _periodic_cleanup(self) -> None:
-        """Clean up old audio files every 30 minutes."""
+        """Clean up old audio files every 30 minutes.
+
+        Cleanup is offloaded to a worker thread (`asyncio.to_thread`) so
+        large directory scans never block the event loop. Retention is
+        split:
+
+        - `audio/uploads/`           → 2 hours   (raw user uploads, transient)
+        - `audio/output/notice_*.wav`        → 720 hours (30 days, public cache)
+        - `audio/output/scheme_summary_*.wav`→ 720 hours (30 days, public cache)
+        - `audio/output/` everything else    → 2 hours   (per-request TTS)
+        """
+        from .audio_utils import cleanup_old_audio as _cleanup
         while True:
             try:
                 await asyncio.sleep(1800)
-                cleanup_old_audio(self.config.audio_upload_dir, max_age_hours=1)
-                cleanup_old_audio(self.config.audio_output_dir, max_age_hours=2)
+                # Raw uploads: short retention.
+                await asyncio.to_thread(
+                    _cleanup, self.config.audio_upload_dir, 2
+                )
+                # Generic output: short retention for transient TTS.
+                await asyncio.to_thread(
+                    _cleanup_output_short,
+                    self.config.audio_output_dir,
+                    2,
+                )
+                # Cached public narration (notice_*, scheme_summary_*): 30 days.
+                await asyncio.to_thread(
+                    _cleanup_output_long,
+                    self.config.audio_output_dir,
+                    720,
+                )
             except asyncio.CancelledError:
                 break
             except Exception as e:

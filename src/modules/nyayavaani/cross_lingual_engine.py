@@ -12,6 +12,13 @@ import httpx
 from .config import NyayaVaaniConfig
 from .language_registry import SUPPORTED_LANGUAGES
 
+# Sanitize citizen-controlled text before LLM prompts.
+try:
+    from src.generation.prompt_templates import sanitize_user_input
+except ImportError:
+    def sanitize_user_input(text: str, max_len: int = 4000) -> str:  # type: ignore
+        return (text or "")[:max_len]
+
 logger = logging.getLogger(__name__)
 
 
@@ -135,6 +142,10 @@ class CrossLingualEngine:
 
         style_instructions = self._get_style_instructions(content_type)
 
+        # Sanitize the source text — it can include arbitrary citizen content
+        # (notice bodies, scheme summaries, even untrusted PDF extracts).
+        safe_text = sanitize_user_input(text, max_len=5000)
+
         prompt = f"""Translate the following text from {source_name} to {target_name} ({target_native}).
 
 {style_instructions}
@@ -143,7 +154,7 @@ IMPORTANT: Return ONLY a JSON object with this exact format:
 {{"translated_text": "your translation here"}}
 
 Text to translate:
-{text}"""
+{safe_text}"""
 
         return await self._call_llm(prompt)
 
@@ -156,12 +167,15 @@ Text to translate:
     ) -> str:
         """Generate a personalized grievance acknowledgement in the target language."""
         lang_name = SUPPORTED_LANGUAGES.get(language, SUPPORTED_LANGUAGES["hi"]).native_name
+        safe_complaint = sanitize_user_input(grievance_text[:200], max_len=200)
+        safe_dept = sanitize_user_input(department, max_len=80)
+        safe_id = sanitize_user_input(grievance_id, max_len=40)
 
         prompt = f"""Generate a brief, empathetic grievance acknowledgement in {lang_name}.
 
-Grievance ID: {grievance_id}
-Department: {department}
-Citizen's complaint: {grievance_text[:200]}
+Grievance ID: {safe_id}
+Department: {safe_dept}
+Citizen's complaint: {safe_complaint}
 
 The acknowledgement should:
 1. Thank the citizen for reporting
@@ -179,11 +193,13 @@ Return ONLY a JSON object: {{"acknowledgement": "your text here"}}"""
     ) -> str:
         """Generate a spoken intro for audio notices."""
         lang_name = SUPPORTED_LANGUAGES.get(language, SUPPORTED_LANGUAGES["hi"]).native_name
+        safe_subject = sanitize_user_input(notice_subject, max_len=300)
+        safe_scheme = sanitize_user_input(scheme_name, max_len=200)
 
         prompt = f"""Generate a brief spoken introduction for a government notice in {lang_name}.
 
-Notice subject: {notice_subject}
-Related scheme: {scheme_name}
+Notice subject: {safe_subject}
+Related scheme: {safe_scheme}
 
 The intro should be suitable for text-to-speech (natural spoken style, no formatting).
 Keep it to 1-2 sentences.

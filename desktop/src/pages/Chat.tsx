@@ -5,6 +5,7 @@ import { Send, Bot, User, Loader2, Sparkles } from 'lucide-react';
 import apiService from '../services/api';
 import PageTransition from '../components/ui/PageTransition';
 import VoiceInputButton from '../components/nyayavaani/VoiceInputButton';
+import AIDisclaimerBanner from '../components/ui/AIDisclaimerBanner';
 
 interface Message {
   id: string;
@@ -76,6 +77,11 @@ const Chat: React.FC = () => {
         </div>
       </div>
 
+      {/* AI-output disclaimer (DPDP/AI safety) */}
+      <div className="px-4 md:px-6 pt-3">
+        <AIDisclaimerBanner storageKey="ai-disclaimer-chat" />
+      </div>
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4" data-lenis-prevent>
         <AnimatePresence>
@@ -109,9 +115,9 @@ const Chat: React.FC = () => {
                       <span className="text-mitti-500 dark:text-mitti-400 text-sm">{t('chat.thinking')}</span>
                     </div>
                   ) : (
-                    <div className="whitespace-pre-wrap leading-relaxed text-sm"
-                      dangerouslySetInnerHTML={{ __html: message.content.replace(/\n/g, '<br/>') }}
-                    />
+                    <div className="whitespace-pre-wrap break-words leading-relaxed text-sm">
+                      {message.content}
+                    </div>
                   )}
                 </div>
                 <p className={`text-[10px] text-mitti-400 mt-1 px-2 ${message.role === 'user' ? 'text-right' : ''}`}>

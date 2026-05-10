@@ -1,5 +1,14 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  ReactNode,
+} from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import apiService from '../services/api';
 
 interface User {
@@ -25,13 +34,89 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// ─── Constants ────────────────────────────────────────────────
+const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+const INACTIVITY_WARNING_MS = 28 * 60 * 1000; // show warning at 28min (2min before logout)
+const REFRESH_BUFFER_MS = 5 * 60 * 1000; // refresh 5min before exp
+const REFRESH_FALLBACK_MS = 50 * 60 * 1000; // if no exp claim, fall back to 50min
+
+// ─── JWT decode (no external dep) ─────────────────────────────
+function decodeJwtExpMs(jwt: string): number | null {
+  try {
+    const parts = jwt.split('.');
+    if (parts.length !== 3) return null;
+    // base64url -> base64
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '=='.slice(0, (4 - (b64.length % 4)) % 4);
+    const json = atob(padded);
+    const payload = JSON.parse(json);
+    if (typeof payload.exp === 'number') {
+      return payload.exp * 1000;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// ─── Inactivity warning modal (inline so AnimatedModal change is independent) ──
+const SessionWarningModal: React.FC<{
+  open: boolean;
+  onStay: () => void;
+  onLogout: () => void;
+}> = ({ open, onStay, onLogout }) => {
+  if (!open) return null;
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="session-warning-title"
+      className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
+    >
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="relative w-full max-w-sm rounded-2xl bg-[#0A1224] border border-white/[0.08] p-6 shadow-2xl">
+        <h3
+          id="session-warning-title"
+          className="text-lg font-semibold text-kora-100 mb-2"
+        >
+          Session expiring soon
+        </h3>
+        <p className="text-sm text-slate-400/80 mb-5">
+          You will be signed out in 2 minutes due to inactivity.
+        </p>
+        <div className="flex gap-3">
+          <button
+            onClick={onLogout}
+            className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-white/[0.04] border border-white/[0.08] text-slate-300 hover:bg-white/[0.08] transition-colors"
+          >
+            Sign out
+          </button>
+          <button
+            onClick={onStay}
+            autoFocus
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-[#0D92F4] text-white hover:bg-[#0B7DD4] transition-colors"
+          >
+            Stay signed in
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showWarning, setShowWarning] = useState(false);
   const navigate = useNavigate();
 
-  // Check authentication on mount
+  // Refs that stay in sync without retriggering effects
+  const logoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const warningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ─── Check authentication on mount ───
   useEffect(() => {
     const checkAuthentication = async () => {
       const storedToken = localStorage.getItem('token');
@@ -54,70 +139,118 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     checkAuthentication();
   }, []);
 
-  // Token refresh: refresh when < 1 hour remaining
+  // ─── Token refresh: schedule based on JWT exp claim ───
   useEffect(() => {
     if (!token) return;
 
-    const refreshInterval = setInterval(async () => {
-      try {
-        const data = await apiService.refreshToken();
-        setToken(data.access_token);
-        localStorage.setItem('token', data.access_token);
-      } catch {
-        // Will be caught by 401 interceptor
+    const scheduleRefresh = (currentToken: string) => {
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+
+      const expMs = decodeJwtExpMs(currentToken);
+      let delay: number;
+      if (expMs) {
+        delay = expMs - Date.now() - REFRESH_BUFFER_MS;
+        if (delay < 0) delay = 0; // refresh immediately if already past buffer
+      } else {
+        delay = REFRESH_FALLBACK_MS;
       }
-    }, 60 * 60 * 1000);
 
-    return () => clearInterval(refreshInterval);
-  }, [token]);
-
-  // Inactivity timeout: 30 min auto-logout
-  useEffect(() => {
-    if (!token) return;
-
-    let timeout: ReturnType<typeof setTimeout>;
-
-    const resetTimer = () => {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => {
-        performLogout();
-      }, 30 * 60 * 1000);
+      refreshTimerRef.current = setTimeout(async () => {
+        try {
+          const data = await apiService.refreshToken();
+          setToken(data.access_token);
+          localStorage.setItem('token', data.access_token);
+          // setToken triggers this effect to re-run and schedule the next refresh
+        } catch {
+          // 401 path will be handled by the response interceptor
+        }
+      }, delay);
     };
 
-    const events = ['mousedown', 'keypress', 'touchstart'];
-    events.forEach((event) => window.addEventListener(event, resetTimer));
-    resetTimer();
+    scheduleRefresh(token);
 
     return () => {
-      clearTimeout(timeout);
-      events.forEach((event) => window.removeEventListener(event, resetTimer));
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
     };
   }, [token]);
 
-  const login = useCallback((newToken: string, newUser: User) => {
-    setToken(newToken);
-    setUser(newUser);
-    localStorage.setItem('token', newToken);
-    localStorage.setItem('user', JSON.stringify(newUser));
-
-    // Use navigate for HashRouter compatibility (NOT window.location.href)
-    const destination = newUser.role === 'officer' ? '/department' : '/dashboard';
-    navigate(destination);
-  }, [navigate]);
-
+  // ─── Logout (declared before inactivity effect that uses it) ───
   const performLogout = useCallback(async () => {
     try {
       await apiService.logout();
     } catch {
-      // Clear local state regardless
+      toast.error('Failed to log out cleanly on the server. Local session cleared.');
     } finally {
       setToken(null);
       setUser(null);
+      setShowWarning(false);
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       navigate('/login');
     }
   }, [navigate]);
+
+  // ─── Inactivity timeout: 30 min auto-logout + 2 min warning ───
+  const showWarningRef = useRef(showWarning);
+  useEffect(() => {
+    showWarningRef.current = showWarning;
+  }, [showWarning]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const resetTimers = () => {
+      if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
+      if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
+      setShowWarning(false);
+
+      warningTimerRef.current = setTimeout(() => {
+        setShowWarning(true);
+      }, INACTIVITY_WARNING_MS);
+
+      logoutTimerRef.current = setTimeout(() => {
+        performLogout();
+      }, INACTIVITY_TIMEOUT_MS);
+    };
+
+    const events: (keyof WindowEventMap)[] = [
+      'mousedown',
+      'mousemove',
+      'keypress',
+      'touchstart',
+      'scroll',
+      'wheel',
+    ];
+    const handler = () => {
+      // Only reset on activity if the warning is NOT being shown.
+      // The warning requires an explicit user choice.
+      if (!showWarningRef.current) resetTimers();
+    };
+    events.forEach((event) => window.addEventListener(event, handler, { passive: true }));
+    resetTimers();
+
+    return () => {
+      if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
+      if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
+      events.forEach((event) => window.removeEventListener(event, handler));
+    };
+  }, [token, performLogout]);
+
+  const login = useCallback(
+    (newToken: string, newUser: User) => {
+      setToken(newToken);
+      setUser(newUser);
+      localStorage.setItem('token', newToken);
+      localStorage.setItem('user', JSON.stringify(newUser));
+
+      const destination = newUser.role === 'officer' ? '/department' : '/dashboard';
+      navigate(destination);
+    },
+    [navigate]
+  );
 
   const logout = useCallback(async () => {
     await performLogout();
@@ -133,6 +266,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [token]);
 
+  // ─── Stay-signed-in handler ───
+  const handleStaySignedIn = useCallback(() => {
+    setShowWarning(false);
+    // Reset by re-triggering the inactivity effect via a no-op activity event
+    if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
+    if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
+    warningTimerRef.current = setTimeout(() => {
+      setShowWarning(true);
+    }, INACTIVITY_WARNING_MS);
+    logoutTimerRef.current = setTimeout(() => {
+      performLogout();
+    }, INACTIVITY_TIMEOUT_MS);
+  }, [performLogout]);
+
   const value: AuthContextType = {
     user,
     token,
@@ -143,7 +290,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     checkAuth,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      <SessionWarningModal
+        open={showWarning && !!token}
+        onStay={handleStaySignedIn}
+        onLogout={performLogout}
+      />
+    </AuthContext.Provider>
+  );
 };
 
 export const useAuth = (): AuthContextType => {

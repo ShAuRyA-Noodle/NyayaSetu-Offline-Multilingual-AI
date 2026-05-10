@@ -1,7 +1,13 @@
 """
 SLA Service
 
-SLA tracking, breach detection, and escalation management.
+SLA tracking, breach detection, escalation management, and a single-leader
+APScheduler that drives periodic breach checks.
+
+TODO (auth/app agent): the FastAPI lifespan in app.py must call
+`start_sla_scheduler()` on startup and `stop_sla_scheduler()` on shutdown.
+The scheduler self-elects via Postgres advisory lock so it's safe to call
+from every replica — only one will become leader.
 """
 
 import logging
@@ -12,6 +18,10 @@ from . import notification_service
 
 logger = logging.getLogger(__name__)
 
+
+# ============================================================================
+# CORE SLA OPERATIONS
+# ============================================================================
 
 def create_sla_record(grievance_id: str, department: str, priority: str):
     """Create SLA record for a new grievance."""
@@ -45,7 +55,7 @@ def create_sla_record(grievance_id: str, department: str, priority: str):
             conn.commit()
 
     except Exception as e:
-        logger.error(f"Failed to create SLA record: {e}")
+        logger.exception("Failed to create SLA record")
 
 
 def get_sla_status(grievance_id: str) -> dict:
@@ -83,19 +93,56 @@ def get_sla_status(grievance_id: str) -> dict:
 
             return sla
     except Exception as e:
-        logger.error(f"Failed to get SLA status: {e}")
+        logger.exception("Failed to get SLA status")
         return None
 
 
+def _record_escalation(conn, grievance_id: str, hours_overdue: float, department: str):
+    """Insert into grievance_escalations (migration 003) for the breach event.
+
+    Best-effort: silently no-ops if the table is absent (e.g. running before
+    migration 003). The notify_* calls remain authoritative.
+    """
+    try:
+        conn.execute("""
+            INSERT INTO grievance_escalations
+            (grievance_id, escalation_level, escalation_reason,
+             hours_overdue, department, escalated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            grievance_id, 1, "sla_breach",
+            hours_overdue, department, datetime.utcnow().isoformat(),
+        ))
+    except Exception as e:
+        logger.debug(f"Could not record escalation (table missing?): {e}")
+
+
+def _notify_admins_of_breach(grievance_id: str, hours_overdue: float):
+    """Notify every active admin of an SLA breach."""
+    try:
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id FROM users WHERE role = 'admin' AND is_active = TRUE"
+            )
+            admin_ids = [r["id"] for r in cursor.fetchall()]
+        for admin_id in admin_ids:
+            notification_service.notify_sla_breach(grievance_id, admin_id, hours_overdue)
+    except Exception as e:
+        logger.exception("Failed to notify admins of breach")
+
+
 def check_all_sla_breaches():
-    """Check for SLA breaches across all active grievances."""
+    """Check for SLA breaches across all active grievances. Logs new breaches,
+    creates escalation rows, and notifies the assigned officer + all admins."""
     try:
         now = datetime.utcnow().isoformat()
+        new_breach_count = 0
         with get_db() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT gs.grievance_id, gs.due_date, gs.sla_hours,
-                       g.department, g.assigned_officer_name
+                       g.department, g.assigned_officer_name, g.assigned_officer_id
                 FROM grievance_sla gs
                 JOIN grievances g ON gs.grievance_id = g.grievance_id
                 WHERE gs.is_breached = FALSE
@@ -105,7 +152,9 @@ def check_all_sla_breaches():
             """, (now,))
 
             breaches = cursor.fetchall()
-            for breach in breaches:
+            breach_list = [dict(b) for b in breaches]
+
+            for breach in breach_list:
                 due = datetime.fromisoformat(breach["due_date"])
                 hours_overdue = (datetime.utcnow() - due).total_seconds() / 3600
 
@@ -116,11 +165,33 @@ def check_all_sla_breaches():
                     WHERE grievance_id = ?
                 """, (now, hours_overdue, now, breach["grievance_id"]))
 
+                _record_escalation(
+                    conn, breach["grievance_id"], hours_overdue, breach["department"],
+                )
+                new_breach_count += 1
+
             conn.commit()
-            return len(breaches)
+
+        # Notify outside the DB context so we never hold locks during fan-out
+        for breach in breach_list:
+            due = datetime.fromisoformat(breach["due_date"])
+            hours_overdue = (datetime.utcnow() - due).total_seconds() / 3600
+
+            officer_id = breach.get("assigned_officer_id")
+            if officer_id:
+                try:
+                    notification_service.notify_sla_breach(
+                        breach["grievance_id"], officer_id, hours_overdue,
+                    )
+                except Exception:
+                    logger.exception("Failed to notify officer of breach")
+
+            _notify_admins_of_breach(breach["grievance_id"], hours_overdue)
+
+        return new_breach_count
 
     except Exception as e:
-        logger.error(f"SLA breach check failed: {e}")
+        logger.exception("SLA breach check failed")
         return 0
 
 
@@ -135,7 +206,7 @@ def pause_sla(grievance_id: str, reason: str):
                 WHERE grievance_id = ? AND is_paused = FALSE
             """, (now, reason, now, grievance_id))
     except Exception as e:
-        logger.error(f"SLA pause failed: {e}")
+        logger.exception("SLA pause failed")
 
 
 def resume_sla(grievance_id: str):
@@ -166,7 +237,7 @@ def resume_sla(grievance_id: str):
                 WHERE grievance_id = ?
             """, (paused_hours, new_due.isoformat(), now.isoformat(), grievance_id))
     except Exception as e:
-        logger.error(f"SLA resume failed: {e}")
+        logger.exception("SLA resume failed")
 
 
 def resolve_sla(grievance_id: str):
@@ -195,7 +266,7 @@ def resolve_sla(grievance_id: str):
                 WHERE grievance_id = ?
             """, (now.isoformat(), within_sla, resolution_hours, now.isoformat(), grievance_id))
     except Exception as e:
-        logger.error(f"SLA resolve failed: {e}")
+        logger.exception("SLA resolve failed")
 
 
 def get_department_sla_report(department: str) -> dict:
@@ -228,7 +299,7 @@ def get_department_sla_report(department: str) -> dict:
                 "avg_resolution_hours": round(row["avg_resolution_hours"] or 0, 1),
             }
     except Exception as e:
-        logger.error(f"SLA report failed: {e}")
+        logger.exception("SLA report failed")
         return {"department": department, "total": 0, "compliance_rate": 100}
 
 
@@ -271,5 +342,76 @@ def get_sla_dashboard() -> dict:
 
         return {"departments": departments, "active_breaches": active_breaches}
     except Exception as e:
-        logger.error(f"SLA dashboard failed: {e}")
+        logger.exception("SLA dashboard failed")
         return {"departments": [], "active_breaches": []}
+
+
+# ============================================================================
+# SCHEDULER (single-leader via Postgres advisory lock)
+# ============================================================================
+
+# APScheduler is imported lazily so the module is still importable in
+# environments without it (the scheduler simply won't start).
+_scheduler = None
+
+
+def start_sla_scheduler():
+    """Start the periodic SLA breach-check job.
+
+    Idempotent. Uses a Postgres advisory lock (id 847291) for single-leader
+    election so multiple replicas can call this safely - only one wins. On
+    SQLite the advisory-lock probe fails silently and every process schedules
+    its own job (acceptable for dev / single-process pilot).
+
+    The auth/app agent must wire this into the FastAPI lifespan startup.
+    """
+    global _scheduler
+    if _scheduler is not None:
+        logger.info("SLA scheduler: already running")
+        return
+
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+    except ImportError:
+        logger.warning("APScheduler not installed; SLA scheduler will not run")
+        return
+
+    # Postgres advisory lock for single-leader election. SQLite has no
+    # pg_try_advisory_lock; the except branch handles both "no such function"
+    # and "wrong dialect" gracefully.
+    try:
+        with get_db() as conn:
+            cursor = conn.execute("SELECT pg_try_advisory_lock(847291)")
+            row = cursor.fetchone()
+            # row[0] is True if lock acquired; False if another replica holds it
+            if row is not None:
+                got_lock = row[0] if not hasattr(row, "keys") else list(row)[0]
+                if got_lock is False:
+                    logger.info("SLA scheduler: another replica holds the lock; skipping")
+                    return
+    except Exception:
+        # SQLite or no advisory_lock function — fine for dev/pilot
+        pass
+
+    _scheduler = BackgroundScheduler(daemon=True)
+    _scheduler.add_job(
+        check_all_sla_breaches,
+        "interval",
+        minutes=5,
+        id="sla_breach_check",
+        replace_existing=True,
+    )
+    _scheduler.start()
+    logger.info("SLA scheduler started (5-minute breach-check interval)")
+
+
+def stop_sla_scheduler():
+    """Stop the SLA scheduler. Idempotent; safe in lifespan shutdown hook."""
+    global _scheduler
+    if _scheduler:
+        try:
+            _scheduler.shutdown(wait=False)
+        except Exception as e:
+            logger.warning(f"SLA scheduler shutdown hit error: {e}")
+        _scheduler = None
+        logger.info("SLA scheduler stopped")

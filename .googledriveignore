@@ -1,0 +1,140 @@
+# .googledriveignore — keep heavy/regenerable artifacts off Drive sync
+# Syntax mirrors .gitignore. Anything matched here is skipped by Drive for desktop.
+
+# ─── Dependencies ─────────────────────────────────────────────────────────
+node_modules/
+**/node_modules/
+.pnp
+.pnp.js
+desktop/node_modules/
+desktop/.vite/
+desktop/dist/
+desktop/dist-electron/
+desktop/release/
+desktop/out/
+
+# ─── Python venvs / caches / build ────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+wheels/
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+
+# ─── Models / heavy ML artifacts (regenerable from HF / scripts) ──────────
+models/
+**/models--*/
+*.pt
+*.bin
+*.safetensors
+*.onnx
+*.gguf
+*.ggml
+*.pkl
+*.pickle
+
+# ─── Vector store / DB / runtime data ─────────────────────────────────────
+data/governance.db
+data/governance.db-wal
+data/governance.db-shm
+data/*.sqlite
+data/*.sqlite3
+data/*.db-journal
+data/schemes_faiss.index
+data/schemes_metadata.pkl
+data/audio/
+data/formatted_docs/
+data/cache/
+data/uploads/
+data/tmp/
+
+# ─── Secrets / env (never sync) ───────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+secrets/
+.secrets/
+
+# ─── Editor / OS junk ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+$RECYCLE.BIN/
+.Spotlight-V100
+.Trashes
+.idea/
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+*.swp
+*.swo
+*~
+.history/
+
+# ─── Logs ─────────────────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ─── Git internals (huge, regenerable from remote) ────────────────────────
+.git/
+.git/**
+
+# ─── Claude / agent caches ────────────────────────────────────────────────
+.claude/cache/
+.agents/cache/
+.cursor/
+.aider*
+
+# ─── Misc temp ────────────────────────────────────────────────────────────
+temp/
+tmp/
+*.bak
+*.tmp
+*.old
+
+# ─── Container / deploy artifacts ─────────────────────────────────────────
+.docker/
+docker-data/
+
+# ─── Frontend build / coverage ────────────────────────────────────────────
+coverage/
+.nyc_output/
+.next/
+.nuxt/
+.turbo/
+.parcel-cache/

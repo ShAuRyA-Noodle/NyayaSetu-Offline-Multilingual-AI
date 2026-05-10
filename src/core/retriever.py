@@ -9,7 +9,13 @@ import numpy as np
 from typing import List, Dict, Tuple
 import logging
 from pathlib import Path
-import pickle
+import json
+# SECURITY: pickle is an RCE sink — pickle.load on attacker-controlled or
+# shared filesystem data can execute arbitrary code. We deliberately do NOT
+# pickle.load here. We persist metadata as JSON, and only fall back to a
+# one-shot pickle migration (load → write JSON → never pickle.load again)
+# for legacy on-disk indexes. New deployments must never produce .pkl.
+import pickle  # noqa: F401  (kept ONLY for the migration path)
 
 # Import FAISS
 try:
@@ -97,65 +103,103 @@ class FAISSRetriever:
         
         logger.info(f"Index built successfully. Total vectors: {self.index.ntotal}")
     
+    @staticmethod
+    def _json_metadata_path(metadata_path: Path) -> Path:
+        """Return the JSON-equivalent path for a metadata path.
+
+        We always persist as JSON. If the caller passes a legacy .pkl path,
+        we save/load .json next to it.
+        """
+        if metadata_path.suffix.lower() == ".pkl":
+            return metadata_path.with_suffix(".json")
+        return metadata_path
+
     def save_index(self, index_path: str, metadata_path: str) -> None:
         """
         Persist FAISS index and metadata to disk.
-        
-        This allows quick startup without re-embedding.
-        
+
+        Metadata is serialized as JSON (NOT pickle) — pickle.load is an RCE
+        sink and we never want untrusted-bytes deserialization in our boot
+        path.
+
         Args:
             index_path: Path to save FAISS index (.index file)
-            metadata_path: Path to save metadata (.pkl file)
-        
+            metadata_path: Path to save metadata. If suffix is .pkl we still
+                write JSON to a sibling .json file.
+
         Raises:
             RuntimeError: If index hasn't been built yet
         """
         if self.index is None:
             raise RuntimeError("Cannot save index before building it")
-        
+
         index_path = Path(index_path)
         metadata_path = Path(metadata_path)
-        
+        json_path = self._json_metadata_path(metadata_path)
+
         # Create parent directories
         index_path.parent.mkdir(parents=True, exist_ok=True)
-        metadata_path.parent.mkdir(parents=True, exist_ok=True)
-        
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+
         logger.info(f"Saving FAISS index to: {index_path}")
         faiss.write_index(self.index, str(index_path))
-        
-        logger.info(f"Saving metadata to: {metadata_path}")
-        with open(metadata_path, 'wb') as f:
-            pickle.dump(self.metadata, f)
-        
+
+        logger.info(f"Saving metadata (JSON) to: {json_path}")
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(self.metadata, f, ensure_ascii=False, indent=2)
+
         logger.info("Index and metadata saved successfully")
-    
+
     def load_index(self, index_path: str, metadata_path: str) -> None:
         """
         Load FAISS index and metadata from disk.
-        
+
+        Loads metadata from JSON. If a legacy pickle file is found and no
+        JSON exists yet, we migrate ONCE: load the pickle, write JSON next
+        to it, and never pickle.load again. This is a one-shot path for
+        upgrades; new code never trusts pickled metadata.
+
         Args:
             index_path: Path to FAISS index file
-            metadata_path: Path to metadata pickle file
-        
+            metadata_path: Path to metadata file (.json preferred; .pkl
+                accepted only for one-shot migration)
+
         Raises:
             FileNotFoundError: If index or metadata files don't exist
         """
         index_path = Path(index_path)
         metadata_path = Path(metadata_path)
-        
+        json_path = self._json_metadata_path(metadata_path)
+
         if not index_path.exists():
             raise FileNotFoundError(f"Index file not found: {index_path}")
-        
-        if not metadata_path.exists():
-            raise FileNotFoundError(f"Metadata file not found: {metadata_path}")
-        
+
         logger.info(f"Loading FAISS index from: {index_path}")
         self.index = faiss.read_index(str(index_path))
-        
-        logger.info(f"Loading metadata from: {metadata_path}")
-        with open(metadata_path, 'rb') as f:
-            self.metadata = pickle.load(f)
-        
+
+        if json_path.exists():
+            logger.info(f"Loading metadata (JSON) from: {json_path}")
+            with open(json_path, "r", encoding="utf-8") as f:
+                self.metadata = json.load(f)
+        elif metadata_path.exists() and metadata_path.suffix.lower() == ".pkl":
+            # SECURITY: pickle.load is an RCE sink. We do this exactly once
+            # for legacy on-disk indexes, then immediately rewrite as JSON
+            # and prefer JSON forever after.
+            logger.warning(
+                "Legacy pickle metadata detected at %s — migrating to JSON. "
+                "pickle.load is an RCE sink; new builds will never produce .pkl.",
+                metadata_path,
+            )
+            with open(metadata_path, "rb") as f:
+                self.metadata = pickle.load(f)  # noqa: S301 (one-shot migration)
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(self.metadata, f, ensure_ascii=False, indent=2)
+            logger.info(f"Migrated metadata to JSON at: {json_path}")
+        else:
+            raise FileNotFoundError(
+                f"Metadata file not found: tried {json_path} and {metadata_path}"
+            )
+
         logger.info(f"Index loaded successfully. Total vectors: {self.index.ntotal}")
     
     def retrieve(

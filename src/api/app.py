@@ -4,18 +4,21 @@ NyayaSetu FastAPI Application
 Production-grade REST API for rural Indian governance services.
 """
 
+import os
 import time
 import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .errors import (
     NyayaSetuAPIError, nyayasetu_error_handler,
     validation_error_handler, general_exception_handler,
+    http_exception_handler,
 )
 from .dependencies import initialize_services, shutdown_services
 from .middleware import (
@@ -23,6 +26,7 @@ from .middleware import (
 )
 from .database import init_core_tables
 from .migrations.runner import run_all_pending
+from .sla_service import start_sla_scheduler, stop_sla_scheduler
 
 # Route modules
 from .auth_routes import router as auth_router
@@ -75,6 +79,12 @@ async def lifespan(app: FastAPI):
         # Initialize ML services
         await initialize_services()
 
+        # Start SLA breach scheduler (5-min interval, advisory-lock leader election)
+        try:
+            start_sla_scheduler()
+        except Exception as exc:
+            logger.warning(f"SLA scheduler failed to start: {exc}")
+
         app.state.startup_time = time.time()
         app.state.request_count = 0
         app.state.requests_by_endpoint = {}
@@ -88,6 +98,10 @@ async def lifespan(app: FastAPI):
     yield
 
     logger.info("NyayaSetu API - Shutting down...")
+    try:
+        stop_sla_scheduler()
+    except Exception as exc:
+        logger.warning(f"SLA scheduler failed to stop cleanly: {exc}")
     await shutdown_services()
     logger.info("All services shut down successfully")
 
@@ -95,6 +109,14 @@ async def lifespan(app: FastAPI):
 # ============================================================================
 # CREATE APPLICATION
 # ============================================================================
+
+_ENV = os.environ.get("ENV", "development").strip().lower()
+_IS_PROD = _ENV == "production"
+
+# In production, hide /docs, /redoc, and the OpenAPI schema entirely.
+_docs_url = None if _IS_PROD else "/docs"
+_redoc_url = None if _IS_PROD else "/redoc"
+_openapi_url = None if _IS_PROD else "/openapi.json"
 
 app = FastAPI(
     title="NyayaSetu API",
@@ -111,8 +133,9 @@ app = FastAPI(
     ),
     version="1.0.0",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url=_docs_url,
+    redoc_url=_redoc_url,
+    openapi_url=_openapi_url,
     openapi_tags=[
         {"name": "Health", "description": "Health checks and monitoring"},
         {"name": "Authentication", "description": "User authentication"},
@@ -131,23 +154,30 @@ app = FastAPI(
 # MIDDLEWARE
 # ============================================================================
 
-import os as _os
-
-# Base set - always allowed (local dev + Electron)
-_cors_base = [
-    "http://localhost:5173",
-    "http://localhost:8001",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:8001",
-    "app://.",
-    "file://",
-]
-
-# Production: additional origins from CORS_ORIGINS env var (comma-separated)
-_cors_env = _os.environ.get("CORS_ORIGINS", "").strip()
+# CORS configuration.
+# - In production (ENV=production): ONLY the entries from CORS_ORIGINS env
+#   var are allowed. Localhost, app://, and file:// origins are dropped.
+# - Otherwise: dev defaults (localhost + Electron) plus any CORS_ORIGINS
+#   entries are allowed.
+_cors_env = os.environ.get("CORS_ORIGINS", "").strip()
 _cors_extra = [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else []
 
-_cors_origins = list(dict.fromkeys(_cors_base + _cors_extra))  # de-duplicate
+if _IS_PROD:
+    _cors_origins = list(dict.fromkeys(_cors_extra))
+    if not _cors_origins:
+        logger.warning(
+            "CORS: production mode but CORS_ORIGINS is empty. No browser origin will be allowed."
+        )
+else:
+    _cors_dev_base = [
+        "http://localhost:5173",
+        "http://localhost:8001",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:8001",
+        "app://.",
+        "file://",
+    ]
+    _cors_origins = list(dict.fromkeys(_cors_dev_base + _cors_extra))
 
 app.add_middleware(
     CORSMiddleware,
@@ -167,6 +197,10 @@ app.add_middleware(RateLimitMiddleware, default_limit=100, window_seconds=60)
 
 app.add_exception_handler(NyayaSetuAPIError, nyayasetu_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
+# Catch raw HTTPException (FastAPI + Starlette flavors) so str(e) leaks
+# from `raise HTTPException(500, str(e))` patterns are handled uniformly.
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(Exception, general_exception_handler)
 
 

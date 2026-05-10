@@ -1,7 +1,7 @@
 # NyayaSetu - Project Intelligence
 
 ## Project Overview
-NyayaSetu (न्यायसेतु) is an AI-powered citizen governance platform for India. Electron desktop app (React 18 + TypeScript + Vite) backed by a Python FastAPI backend with RAG pipeline, voice interface (12 Indian languages), and enterprise auth.
+NyayaSetu (न्यायसेतु) is an AI-powered citizen governance platform for India. Electron desktop app (React 18 + TypeScript + Vite) backed by a Python FastAPI backend with RAG pipeline, voice interface, and enterprise auth. The UI ships in English and Hindi; the voice pipeline (ASR / TTS / translation) supports 12 Indian languages via Sarvam AI.
 
 ## Tech Stack
 - **Backend**: Python, FastAPI, Uvicorn (port 8001)
@@ -11,7 +11,7 @@ NyayaSetu (न्यायसेतु) is an AI-powered citizen governance plat
 - **Vector Store**: FAISS IndexFlatIP
 - **Database**: SQLite (WAL mode), 20+ tables, 4 migrations
 - **Auth**: JWT HS256 + bcrypt
-- **Voice**: Sarvam AI (online) / faster-whisper + pyttsx3 (offline)
+- **Voice**: UI live ASR/TTS via Web Speech API (browser); Sarvam AI for server-side cached notice narration; faster-whisper + pyttsx3 for fully-offline parity (12 languages)
 - **Styling**: Tailwind CSS with custom Indian earth-tone palette
 
 ## Key Directories
@@ -24,9 +24,11 @@ NyayaSetu (न्यायसेतु) is an AI-powered citizen governance plat
 - `models/` — Cached sentence-transformer model
 
 ## API Base URLs
-- Backend: `http://localhost:8001`
-- Frontend: `http://localhost:5173`
-- Ollama: `http://localhost:11434`
+- Backend (local dev): `http://localhost:8001`
+- Backend (production / HF Spaces): `https://<owner>-<space>.hf.space` (port 7860 internally; Spaces handles TLS)
+- Frontend (local dev): `http://localhost:5173`
+- Frontend (production / Vercel): `https://<project>.vercel.app`
+- Ollama (dev only): `http://localhost:11434`
 
 ## Design System
 Unified dark theme. Deep sea-navy base (#060B18). Glass morphism surfaces with blue-tinted frosted glass. Accent palette: #0D92F4 (primary blue), #77CDFF (light blue), #F95454 (coral), #C62E2E (deep red). Aurora ambient orbs, grain overlay, gradient mesh backgrounds. Fonts: Inter, Playfair Display, Noto Sans Devanagari. No dark/light toggle — single unified theme.

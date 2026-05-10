@@ -9,6 +9,8 @@ import PageTransition from '../components/ui/PageTransition';
 import ThemedSpinner from '../components/ui/ThemedSpinner';
 import AnimatedModal from '../components/ui/AnimatedModal';
 import SchemeDocumentViewer, { FormattedDoc } from '../components/ui/SchemeDocumentViewer';
+import AIDisclaimerBanner from '../components/ui/AIDisclaimerBanner';
+import { useDialog } from '../components/ui/ConfirmDialog';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import apiService from '../services/api';
@@ -120,6 +122,12 @@ const BrowseTab: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
 
+  // Pagination — basic offset/limit for browse list
+  const [visibleCount, setVisibleCount] = useState(25);
+  const PAGE_SIZE = 25;
+
+  const { confirm, ConfirmHost } = useDialog();
+
   useEffect(() => { loadSchemes(); }, []);
 
   // Auto-trigger English summary whenever a scheme is selected
@@ -181,7 +189,13 @@ const BrowseTab: React.FC = () => {
       toast.error('Cannot delete: scheme has no ID in metadata');
       return;
     }
-    if (!confirm(`Are you sure you want to delete "${scheme.name}"? This action will archive the scheme.`)) return;
+    const ok = await confirm({
+      title: `Delete "${scheme.name}"?`,
+      message: 'This will archive the scheme and remove it from the public browser. This action cannot be undone from the UI.',
+      confirmText: 'Delete scheme',
+      tone: 'danger',
+    });
+    if (!ok) return;
     try {
       await apiService.deleteScheme(scheme.scheme_id);
       toast.success('Scheme deleted');
@@ -270,6 +284,8 @@ const BrowseTab: React.FC = () => {
   };
 
   const filtered = schemes.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const visibleSchemes = filtered.slice(0, visibleCount);
+  const hasMore = filtered.length > visibleSchemes.length;
   const colors = [
     'from-mitti-500 to-mitti-600',
     'from-neel-500 to-neel-600',
@@ -302,7 +318,7 @@ const BrowseTab: React.FC = () => {
       {/* Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
         <AnimatePresence>
-          {filtered.map((scheme, index) => (
+          {visibleSchemes.map((scheme, index) => (
             <motion.div
               key={scheme.name}
               custom={index}
@@ -359,6 +375,19 @@ const BrowseTab: React.FC = () => {
           ))}
         </AnimatePresence>
       </div>
+
+      {/* Show more — basic offset/limit pagination */}
+      {hasMore && (
+        <div className="flex justify-center mt-6">
+          <button
+            type="button"
+            onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+            className="px-5 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm font-medium text-kora-100 hover:bg-white/[0.06] transition-colors"
+          >
+            Show more <span className="text-slate-500 ml-1">({filtered.length - visibleSchemes.length} remaining)</span>
+          </button>
+        </div>
+      )}
 
       {/* Rename Modal (Admin) */}
       <AnimatedModal isOpen={!!editingScheme} onClose={() => setEditingScheme(null)} maxWidth="max-w-md">
@@ -454,6 +483,9 @@ const BrowseTab: React.FC = () => {
             {/* ---- AI SUMMARY TAB ---- */}
             {modalTab === 'summary' && (
               <div className="p-3 md:p-5 space-y-4">
+
+                {/* AI disclaimer */}
+                <AIDisclaimerBanner storageKey="ai-disclaimer-schemes" />
 
                 {/* Language toggle header */}
                 <div className="flex items-center justify-between">
@@ -631,6 +663,8 @@ const BrowseTab: React.FC = () => {
           </div>
         </div>
       </AnimatedModal>
+
+      <ConfirmHost />
     </>
   );
 };
@@ -753,6 +787,7 @@ const MySchemesTab: React.FC = () => {
   const { t } = useTranslation();
   const [schemes, setSchemes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { confirm, ConfirmHost } = useDialog();
 
   useEffect(() => { loadMySchemes(); }, []);
 
@@ -764,7 +799,13 @@ const MySchemesTab: React.FC = () => {
   };
 
   const handleDelete = async (schemeId: string) => {
-    if (!confirm('Delete this scheme?')) return;
+    const ok = await confirm({
+      title: 'Delete this scheme?',
+      message: 'This action archives the scheme and removes it from listings.',
+      confirmText: 'Delete',
+      tone: 'danger',
+    });
+    if (!ok) return;
     try {
       await apiService.deleteScheme(schemeId);
       loadMySchemes();
@@ -778,10 +819,13 @@ const MySchemesTab: React.FC = () => {
   );
 
   if (schemes.length === 0) return (
-    <div className="village-card rounded-xl p-12 text-center">
-      <FileText className="w-12 h-12 text-mitti-400 mx-auto mb-3" />
-      <p className="text-mitti-600 dark:text-mitti-400">{t('schemes.noSchemes', 'No schemes uploaded yet.')}</p>
-    </div>
+    <>
+      <div className="village-card rounded-xl p-12 text-center">
+        <FileText className="w-12 h-12 text-mitti-400 mx-auto mb-3" />
+        <p className="text-mitti-600 dark:text-mitti-400">{t('schemes.noSchemes', 'No schemes uploaded yet.')}</p>
+      </div>
+      <ConfirmHost />
+    </>
   );
 
   return (
@@ -810,6 +854,7 @@ const MySchemesTab: React.FC = () => {
           </div>
         </motion.div>
       ))}
+      <ConfirmHost />
     </div>
   );
 };

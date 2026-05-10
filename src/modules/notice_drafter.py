@@ -16,6 +16,14 @@ import json
 import logging
 import re
 
+import cachetools
+
+# Sanitizer for citizen-controlled inputs (scheme name flows into the prompt).
+try:
+    from ..generation.prompt_templates import sanitize_user_input
+except ImportError:
+    from generation.prompt_templates import sanitize_user_input
+
 # Type aliases for clarity
 Language = Literal["en", "hi"]
 NoticeType = Literal["circular", "order", "memo", "notification", "advisory", "amendment"]
@@ -310,9 +318,10 @@ Be formal, factual, and use official government notice language. Extract informa
         """
         self.rag_engine = rag_engine
         self.answer_generator = answer_generator
-        self._cache: Dict[str, GovernmentNotice] = {}
-        
-        logger.info("NoticeDrafter initialized")
+        # Bounded LRU — was an unbounded dict.
+        self._cache: "cachetools.LRUCache[str, GovernmentNotice]" = cachetools.LRUCache(maxsize=500)
+
+        logger.info("NoticeDrafter initialized (LRU cache size=500)")
     
     def draft_notice(
         self,
@@ -352,9 +361,13 @@ Be formal, factual, and use official government notice language. Extract informa
         # Input validation
         if not scheme_name or not scheme_name.strip():
             raise ValueError("scheme_name cannot be empty")
-        
-        scheme_name = scheme_name.strip()
-        
+
+        # Sanitize before this string flows into LLM prompts. Citizens can
+        # supply scheme names through the UI for ad-hoc notice drafting.
+        scheme_name = sanitize_user_input(scheme_name.strip(), max_len=200)
+        if not scheme_name:
+            raise ValueError("scheme_name cannot be empty after sanitization")
+
         # Set default dates
         if issue_date is None:
             issue_date = date.today()
@@ -541,15 +554,18 @@ Be formal, factual, and use official government notice language. Extract informa
             Formatted context string
         """
         context_parts = []
-        
-        for score, metadata, explanation in retrieved_chunks:
+
+        for _score, metadata, explanation in retrieved_chunks:
             section_type = metadata.get("section_type", "general")
-            content = metadata.get("content", explanation)
-            
+            # Read the embedded chunk text from metadata['content'] now that
+            # the chunker writes it there. Fall back to the banner string
+            # only if (somehow) the field is missing.
+            content = metadata.get("content") or explanation
+
             context_parts.append(
                 f"[{section_type.upper()}]\n{content}\n"
             )
-        
+
         return "\n".join(context_parts)
     
     def _parse_llm_response(self, response: Any) -> Dict[str, Any]:

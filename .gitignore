@@ -39,15 +39,14 @@ models/
 translation_models/
 
 # Database files (keep seed files, ignore runtime DBs)
-backend/data/*.db
-backend/data/cache/*.db
 data/*.db
 data/*.db-journal
 data/*.db-wal
 data/*.db-shm
 data/cache/
 data/audio/
-!backend/data/schemes_seed.json
+*.sqlite
+*.sqlite3
 
 # Database dumps (migration artifacts - never commit)
 *.sql.gz
@@ -57,9 +56,6 @@ data/sqlite_export.sql
 data/postgres_import.sql
 
 # FAISS indexes and pickles (regenerated from seed data)
-backend/data/*.index
-backend/data/*.pkl
-backend/data/*.bin
 data/*.index
 data/*.pkl
 data/*.bin
@@ -129,6 +125,17 @@ archive/backup_api/
 
 # Claude Code
 .claude/
+.agents/
+skills-lock.json
+
+# =========================
+# Build & Cache (extra)
+# =========================
+coverage/
+.nyc_output/
+.next/
+.turbo/
+.envrc
 
 # =========================
 # Future: Desktop App

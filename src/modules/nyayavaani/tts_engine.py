@@ -3,6 +3,7 @@ TTS Engine — Text-to-Speech using Sarvam AI Bulbul (online) or pyttsx3 (offlin
 """
 
 import logging
+import os
 import base64
 import uuid
 import time
@@ -17,6 +18,21 @@ from .config import NyayaVaaniConfig
 from .language_registry import SUPPORTED_LANGUAGES
 
 logger = logging.getLogger(__name__)
+
+# Production guardrail: missing Sarvam key in production = fail at import.
+# pyttsx3 doesn't render Indic scripts and crashes on most serverless hosts,
+# so silently falling back to it is worse than crashing here.
+if os.environ.get("ENV", "").lower() == "production" and not os.environ.get("SARVAM_API_KEY"):
+    raise RuntimeError(
+        "TTS engine refusing to load: ENV=production but SARVAM_API_KEY is empty. "
+        "Set the key or move offline TTS to a separately-flagged service."
+    )
+
+
+def _allow_pyttsx3() -> bool:
+    """Offline TTS is opt-in. Defaults OFF so we don't accidentally serve
+    silent / corrupted .wav files from a host without TTS engines."""
+    return os.environ.get("ALLOW_PYTTSX3", "0") == "1"
 
 
 @dataclass
@@ -112,7 +128,20 @@ class TTSEngine:
         )
 
     async def _synthesize_pyttsx3(self, text: str, language_code: str) -> SynthesisResult:
-        """Synthesize using pyttsx3 (offline fallback)."""
+        """Synthesize using pyttsx3 (offline fallback). Opt-in via ALLOW_PYTTSX3=1.
+
+        Without the env flag, refuse rather than emit garbage audio. pyttsx3
+        does not handle Indic scripts properly and crashes on most CI/cloud
+        hosts (no SAPI / espeak available), so silently producing broken
+        .wav files is the worst possible failure mode.
+        """
+        if not _allow_pyttsx3():
+            raise RuntimeError(
+                "Offline TTS unavailable on this host. "
+                "Configure SARVAM_API_KEY (recommended) or set ALLOW_PYTTSX3=1 if "
+                "you have verified a working pyttsx3 backend locally."
+            )
+
         import asyncio
 
         def _run_pyttsx3():

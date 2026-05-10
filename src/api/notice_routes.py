@@ -11,6 +11,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from .auth_routes import get_current_user, require_role
+from .auth_utils import log_audit_action
 from .schemas import DraftNoticeRequest, NoticeResponse, SaveDraftRequest, UpdateNoticeRequest
 from .dependencies import get_notice_drafter
 from .database import get_db
@@ -32,8 +33,14 @@ def generate_reference_number(notice_type: str) -> str:
 
 
 @router.post("/api/v1/notices/generate", response_model=NoticeResponse)
-async def generate_notice(request: DraftNoticeRequest):
-    """AI-generate notice content. Falls back to direct LLM if RAG fails."""
+async def generate_notice(
+    request: DraftNoticeRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """AI-generate notice content (officer/admin only - LLM cost gate). Falls back to direct LLM if RAG fails."""
+    if current_user["role"] not in ("officer", "admin"):
+        raise HTTPException(403, "Officer or admin access required")
+
     effective_date = None
     if request.effective_date:
         effective_date = datetime.strptime(request.effective_date, "%Y-%m-%d").date()
@@ -136,15 +143,18 @@ async def generate_notice(request: DraftNoticeRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"LLM notice fallback also failed: {e}")
-        raise HTTPException(503, f"Notice generation unavailable: {e}")
+        logger.exception("LLM notice fallback also failed")
+        raise HTTPException(503, "Notice generation unavailable")
 
 
 # Keep legacy endpoint for backward compatibility
 @router.post("/api/v1/draft-notice", response_model=NoticeResponse)
-async def draft_notice_legacy(request: DraftNoticeRequest):
-    """Draft official government notice (legacy endpoint)."""
-    return await generate_notice(request)
+async def draft_notice_legacy(
+    request: DraftNoticeRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Draft official government notice (legacy endpoint, officer/admin only)."""
+    return await generate_notice(request, current_user=current_user)
 
 
 @router.post("/api/v1/notices/draft")
@@ -152,7 +162,9 @@ async def save_notice_draft(
     request: "SaveDraftRequest",
     current_user: dict = Depends(get_current_user),
 ):
-    """Save notice as draft."""
+    """Save notice as draft. Officer/admin only."""
+    if current_user["role"] not in ("officer", "admin"):
+        raise HTTPException(403, "Officer or admin access required")
     try:
         notice_id = generate_notice_id(request.notice_type, request.scheme_name)
         ref_number = generate_reference_number(request.notice_type)
@@ -177,9 +189,11 @@ async def save_notice_draft(
             "success": True, "notice_id": notice_id,
             "reference_number": ref_number, "status": "draft",
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Save draft failed: {e}")
-        raise HTTPException(500, str(e))
+        logger.exception("Save draft failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.get("/api/v1/notices")
@@ -225,8 +239,8 @@ async def list_notices(
             notices = [dict(r) for r in cursor.fetchall()]
         return {"notices": notices, "count": len(notices)}
     except Exception as e:
-        logger.error(f"List notices failed: {e}")
-        raise HTTPException(500, str(e))
+        logger.exception("List notices failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.get("/api/v1/notices/public")
@@ -264,8 +278,8 @@ async def public_notice_board(
 
         return {"notices": notices, "count": len(notices), "total": total}
     except Exception as e:
-        logger.error(f"Public board failed: {e}")
-        raise HTTPException(500, str(e))
+        logger.exception("Public board failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.get("/api/v1/notices/public/{notice_id}")
@@ -294,13 +308,13 @@ async def public_notice_detail(notice_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Public detail failed: {e}")
-        raise HTTPException(500, str(e))
+        logger.exception("Public detail failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.get("/api/v1/notices/{notice_id}")
 async def get_notice(notice_id: str, current_user: dict = Depends(get_current_user)):
-    """Get notice details."""
+    """Get notice details. Admin sees all; officer sees only own department's; citizen sees only published."""
     try:
         with get_db() as conn:
             cursor = conn.cursor()
@@ -308,11 +322,24 @@ async def get_notice(notice_id: str, current_user: dict = Depends(get_current_us
             row = cursor.fetchone()
             if not row:
                 raise HTTPException(404, "Notice not found")
-        return dict(row)
+            data = dict(row)
+
+            role = current_user.get("role")
+            if role == "admin":
+                return data
+            if role == "officer":
+                if data.get("officer_department") and data["officer_department"] != current_user.get("department"):
+                    raise HTTPException(403, "You can only view notices in your own department")
+                return data
+            # citizen: only published notices
+            if data.get("status") != "published":
+                raise HTTPException(403, "Citizens can only view published notices")
+            return data
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, str(e))
+        logger.exception("Get notice failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.put("/api/v1/notices/{notice_id}")
@@ -363,12 +390,13 @@ async def update_notice(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, str(e))
+        logger.exception("Update notice failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.delete("/api/v1/notices/{notice_id}")
 async def delete_notice(notice_id: str, current_user: dict = Depends(get_current_user)):
-    """Delete draft notice."""
+    """Delete draft notice. Owner-officer or admin only."""
     try:
         with get_db() as conn:
             cursor = conn.cursor()
@@ -380,39 +408,58 @@ async def delete_notice(notice_id: str, current_user: dict = Depends(get_current
                 raise HTTPException(404, "Notice not found")
             if row["status"] != "draft":
                 raise HTTPException(400, "Can only delete draft notices")
+            # Ownership check: must own the notice OR be admin
+            if row["officer_id"] != current_user["id"] and current_user["role"] != "admin":
+                raise HTTPException(403, "You can only delete your own draft notices")
 
             conn.execute("DELETE FROM notices WHERE notice_id = ?", (notice_id,))
+
+        log_audit_action(
+            action="notice_delete",
+            user_id=current_user["id"],
+            target_id=notice_id,
+        )
         return {"success": True, "notice_id": notice_id}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, str(e))
+        logger.exception("Delete notice failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.post("/api/v1/notices/{notice_id}/submit-review")
 async def submit_for_review(notice_id: str, current_user: dict = Depends(get_current_user)):
-    """Submit notice for review."""
+    """Submit notice for review. Owner-officer only (admins don't submit their own to themselves)."""
     try:
         with get_db() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT status FROM notices WHERE notice_id = ?", (notice_id,)
+                "SELECT status, officer_id FROM notices WHERE notice_id = ?", (notice_id,)
             )
             row = cursor.fetchone()
             if not row:
                 raise HTTPException(404, "Notice not found")
             if row["status"] != "draft":
                 raise HTTPException(400, "Notice must be in draft status")
+            # Ownership check
+            if row["officer_id"] != current_user["id"] and current_user["role"] != "admin":
+                raise HTTPException(403, "You can only submit your own notices for review")
 
             conn.execute(
                 "UPDATE notices SET status = 'pending_review', updated_at = CURRENT_TIMESTAMP WHERE notice_id = ?",
                 (notice_id,),
             )
+        log_audit_action(
+            action="notice_submit_review",
+            user_id=current_user["id"],
+            target_id=notice_id,
+        )
         return {"success": True, "notice_id": notice_id, "status": "pending_review"}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, str(e))
+        logger.exception("Submit for review failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.post("/api/v1/notices/{notice_id}/review")
@@ -422,33 +469,55 @@ async def review_notice(
     review_notes: str = Query(default=""),
     current_user: dict = Depends(require_role("admin")),
 ):
-    """Approve or reject notice."""
+    """Approve or reject notice. Admin only. Atomic single-UPDATE state transition."""
     try:
         now = datetime.utcnow().isoformat()
         new_status = "approved" if approved else "draft"
 
         with get_db() as conn:
-            conn.execute("""
-                UPDATE notices
-                SET status = ?, reviewed_by = ?, reviewed_at = ?,
-                    review_notes = ?, updated_at = ?
-                WHERE notice_id = ? AND status = 'pending_review'
-            """, (new_status, current_user["id"], now, review_notes, now, notice_id))
-
+            cursor = conn.cursor()
+            # Atomic review: collapses status flip + reviewer + (conditionally) approver into one UPDATE.
+            # Only succeeds when current status is 'pending_review'.
             if approved:
-                conn.execute(
-                    "UPDATE notices SET approved_by = ?, approved_at = ? WHERE notice_id = ?",
-                    (current_user["id"], now, notice_id),
-                )
+                cursor.execute("""
+                    UPDATE notices
+                    SET status = ?, reviewed_by = ?, reviewed_at = ?,
+                        review_notes = ?, approved_by = ?, approved_at = ?,
+                        updated_at = ?
+                    WHERE notice_id = ? AND status = 'pending_review'
+                """, (new_status, current_user["id"], now, review_notes,
+                      current_user["id"], now, now, notice_id))
+            else:
+                cursor.execute("""
+                    UPDATE notices
+                    SET status = ?, reviewed_by = ?, reviewed_at = ?,
+                        review_notes = ?, updated_at = ?
+                    WHERE notice_id = ? AND status = 'pending_review'
+                """, (new_status, current_user["id"], now, review_notes, now, notice_id))
 
+            if cursor.rowcount == 0:
+                raise HTTPException(409, "Notice not in 'pending_review' state or not found")
+
+        log_audit_action(
+            action="notice_review",
+            user_id=current_user["id"],
+            target_id=notice_id,
+            metadata={"approved": approved, "notes": review_notes},
+        )
         return {"success": True, "notice_id": notice_id, "status": new_status}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(500, str(e))
+        logger.exception("Review notice failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.post("/api/v1/notices/{notice_id}/publish")
-async def publish_notice(notice_id: str, current_user: dict = Depends(get_current_user)):
-    """Publish an approved notice."""
+async def publish_notice(
+    notice_id: str,
+    current_user: dict = Depends(require_role("admin")),
+):
+    """Publish an approved notice. Admin only."""
     try:
         now = datetime.utcnow().isoformat()
         with get_db() as conn:
@@ -466,20 +535,26 @@ async def publish_notice(notice_id: str, current_user: dict = Depends(get_curren
                 WHERE notice_id = ?
             """, (current_user["id"], now, now, notice_id))
 
+        log_audit_action(
+            action="notice_publish",
+            user_id=current_user["id"],
+            target_id=notice_id,
+        )
         return {"success": True, "notice_id": notice_id, "status": "published"}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, str(e))
+        logger.exception("Publish notice failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.post("/api/v1/notices/{notice_id}/withdraw")
 async def withdraw_notice(
     notice_id: str,
     reason: str = Query(...),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_role("admin")),
 ):
-    """Withdraw a published notice."""
+    """Withdraw a published notice. Admin only."""
     try:
         now = datetime.utcnow().isoformat()
         with get_db() as conn:
@@ -490,6 +565,13 @@ async def withdraw_notice(
                 WHERE notice_id = ? AND status = 'published'
             """, (current_user["id"], now, reason, now, notice_id))
 
+        log_audit_action(
+            action="notice_withdraw",
+            user_id=current_user["id"],
+            target_id=notice_id,
+            metadata={"reason": reason},
+        )
         return {"success": True, "notice_id": notice_id, "status": "withdrawn"}
     except Exception as e:
-        raise HTTPException(500, str(e))
+        logger.exception("Withdraw notice failed")
+        raise HTTPException(500, "Internal server error")

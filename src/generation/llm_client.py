@@ -8,6 +8,7 @@ import os
 import requests
 import time
 import logging
+import threading
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
 
@@ -34,9 +35,15 @@ class LLMConfig:
     model: str = "qwen2.5:14b-instruct-q4_0"
     base_url: str = "http://localhost:11434"
 
-    # Shared generation settings
+    # Shared generation settings.
+    # NOTE: temperature=0.0 is recommended for deterministic routing /
+    # classification (grievance router, intent classifier). Callers can
+    # override per-call via .generate(..., temperature=...).
     temperature: float = 0.1
-    max_tokens: int = 150
+    # Bumped from 150 → 800. The old default truncated answers mid-sentence
+    # and was the root cause of "repair_incomplete_json" silently fabricating
+    # fields. Callers that want short outputs still pass max_tokens explicitly.
+    max_tokens: int = 800
     timeout: int = 90
     max_retries: int = 3
     retry_delay: float = 1.0
@@ -59,6 +66,26 @@ class OllamaClient:
     Keeps the same .generate() interface so nothing else changes.
     """
 
+    # ------------------------------------------------------------------
+    # Class-level circuit breaker
+    #
+    # If Groq returns 3 consecutive 5xx within 60s, open the breaker for
+    # 5 minutes. While open, generate() short-circuits and returns a
+    # "service_degraded" error rather than hammering a sick upstream.
+    # Shared across instances because all clients hit the same Groq edge.
+    # ------------------------------------------------------------------
+    _CB_FAILURE_THRESHOLD = 3
+    _CB_FAILURE_WINDOW_SEC = 60.0
+    _CB_OPEN_DURATION_SEC = 300.0  # 5 min
+
+    _circuit_breaker: Dict[str, Any] = {
+        "failures": 0,            # consecutive 5xx count
+        "first_failure_at": None,  # timestamp of first failure in window
+        "opened_at": None,         # timestamp breaker was opened (None if closed)
+        "is_open": False,
+    }
+    _cb_lock = threading.Lock()
+
     def __init__(self, config: Optional[LLMConfig] = None):
         self.config = config or LLMConfig()
         self._validate_configuration()
@@ -66,6 +93,65 @@ class OllamaClient:
         backend = "Groq Cloud" if self._use_groq else "Ollama Local"
         model = self.config.groq_model if self._use_groq else self.config.model
         logger.info(f"Initialized LLMClient → {backend} ({model})")
+
+    # ------------------------------------------------------------------
+    # Circuit breaker helpers
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def _cb_should_short_circuit(cls) -> bool:
+        """Return True if breaker is open and we should fail fast."""
+        with cls._cb_lock:
+            if not cls._circuit_breaker["is_open"]:
+                return False
+            opened_at = cls._circuit_breaker["opened_at"] or 0.0
+            if time.time() - opened_at >= cls._CB_OPEN_DURATION_SEC:
+                # Half-open: clear and allow one trial.
+                cls._circuit_breaker.update(
+                    failures=0,
+                    first_failure_at=None,
+                    opened_at=None,
+                    is_open=False,
+                )
+                logger.info("LLM circuit breaker reset → half-open trial")
+                return False
+            return True
+
+    @classmethod
+    def _cb_record_failure(cls) -> None:
+        """Record a 5xx (or transport) failure and possibly open the breaker."""
+        now = time.time()
+        with cls._cb_lock:
+            first = cls._circuit_breaker["first_failure_at"]
+            if first is None or (now - first) > cls._CB_FAILURE_WINDOW_SEC:
+                # Start a fresh window
+                cls._circuit_breaker["first_failure_at"] = now
+                cls._circuit_breaker["failures"] = 1
+            else:
+                cls._circuit_breaker["failures"] += 1
+
+            if cls._circuit_breaker["failures"] >= cls._CB_FAILURE_THRESHOLD:
+                cls._circuit_breaker["is_open"] = True
+                cls._circuit_breaker["opened_at"] = now
+                logger.error(
+                    "LLM circuit breaker OPENED — %d consecutive 5xx in %.0fs window. "
+                    "Will short-circuit for %.0fs.",
+                    cls._circuit_breaker["failures"],
+                    cls._CB_FAILURE_WINDOW_SEC,
+                    cls._CB_OPEN_DURATION_SEC,
+                )
+
+    @classmethod
+    def _cb_record_success(cls) -> None:
+        """Reset failure counters on a healthy response."""
+        with cls._cb_lock:
+            if cls._circuit_breaker["failures"] or cls._circuit_breaker["is_open"]:
+                cls._circuit_breaker.update(
+                    failures=0,
+                    first_failure_at=None,
+                    opened_at=None,
+                    is_open=False,
+                )
 
     def _validate_configuration(self) -> None:
         if not 0 <= self.config.temperature <= 1:
@@ -137,6 +223,19 @@ class OllamaClient:
         if not prompt or not prompt.strip():
             raise ValueError("Prompt cannot be empty")
 
+        # Circuit breaker only applies to the Groq cloud path. Local Ollama
+        # is on the same host as the API server — failing fast there has no
+        # benefit and would just hide local restarts.
+        if self._use_groq and self._cb_should_short_circuit():
+            return {
+                "success": False,
+                "error": "service_degraded",
+                "metadata": {
+                    "reason": "circuit_breaker_open",
+                    "backend": "groq",
+                },
+            }
+
         if self._use_groq:
             return self._generate_groq(prompt, system_prompt, temperature, max_tokens)
         return self._generate_ollama(prompt, system_prompt, temperature, max_tokens)
@@ -183,6 +282,7 @@ class OllamaClient:
                     data = response.json()
                     text = data["choices"][0]["message"]["content"].strip()
                     usage = data.get("usage", {})
+                    self._cb_record_success()
                     logger.info(f"Generation successful in {elapsed:.2f}s")
                     return {
                         "success": True,
@@ -196,12 +296,17 @@ class OllamaClient:
                         },
                     }
 
-                # Rate limit — Groq returns 429
+                # Rate limit — Groq returns 429. Don't count toward breaker;
+                # 429 is a client-side throttle, not an upstream outage.
                 if response.status_code == 429:
                     retry_after = float(response.headers.get("retry-after", 2))
                     logger.warning(f"Groq rate limited. Retrying in {retry_after}s...")
                     time.sleep(retry_after)
                     continue
+
+                # 5xx → upstream failure → feed the circuit breaker.
+                if 500 <= response.status_code < 600:
+                    self._cb_record_failure()
 
                 error_msg = f"HTTP {response.status_code}: {response.text[:300]}"
                 logger.warning(f"Attempt {attempt+1} failed: {error_msg}")
@@ -209,10 +314,13 @@ class OllamaClient:
             except requests.exceptions.Timeout:
                 error_msg = f"Request timeout after {self.config.timeout}s"
                 logger.warning(f"Attempt {attempt+1} timed out")
+                # Treat timeouts as upstream failures for breaker purposes.
+                self._cb_record_failure()
 
             except requests.exceptions.RequestException as e:
                 error_msg = f"Request failed: {e}"
                 logger.error(f"Attempt {attempt+1} failed: {error_msg}")
+                self._cb_record_failure()
 
             except Exception as e:
                 error_msg = f"Unexpected error: {e}"
@@ -312,6 +420,42 @@ def create_client(model: str = "qwen2.5:14b-instruct-q4_0") -> OllamaClient:
     """
     config = LLMConfig(model=model)
     return OllamaClient(config)
+
+
+def assert_groq_reachable() -> None:
+    """Startup health check for the dependencies layer.
+
+    In production (`ENV=production`), if Groq is configured but unreachable,
+    this raises RuntimeError so deployment fails loudly instead of silently
+    falling back to Ollama (which is almost certainly NOT installed on the
+    serverless host). In dev, we log a warning and let Ollama fallback take
+    over.
+    """
+    env = os.environ.get("ENV", "development").lower()
+    groq_key = os.environ.get("GROQ_API_KEY", "")
+
+    if not groq_key:
+        if env == "production":
+            raise RuntimeError(
+                "GROQ_API_KEY is not set in production. "
+                "Refusing to start — silent Ollama fallback would crash on "
+                "serverless hosts. Set GROQ_API_KEY or explicitly switch to "
+                "an environment where Ollama is reachable."
+            )
+        logger.warning(
+            "GROQ_API_KEY not set — LLM client will use local Ollama. "
+            "This is fine for development but NOT for production."
+        )
+        return
+
+    client = OllamaClient(LLMConfig(groq_api_key=groq_key))
+    if not client.health_check():
+        if env == "production":
+            raise RuntimeError(
+                "Groq health check failed in production. "
+                "Refusing to start with a degraded LLM backend."
+            )
+        logger.warning("Groq health check failed — falling back to Ollama if available.")
 
 
 if __name__ == "__main__":

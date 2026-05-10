@@ -93,7 +93,29 @@
     "registerError": "Registration failed. Please try again.",
     "passwordStrength": "Password Strength",
     "designation": "Designation",
-    "location": "Location"
+    "location": "Location",
+    "captchaRequired": "Please complete the captcha to register."
+  },
+  "forgotPassword": {
+    "title": "Forgot Password?",
+    "subtitle": "Enter your email — we'll send a reset link if an account exists.",
+    "emailLabel": "Email Address",
+    "submitBtn": "Send Reset Link",
+    "successMsg": "If an account exists, you'll receive a reset link shortly.",
+    "backToLogin": "Back to login"
+  },
+  "resetPassword": {
+    "title": "Reset Password",
+    "subtitle": "Choose a strong new password for your account.",
+    "passwordLabel": "New Password",
+    "confirmLabel": "Confirm Password",
+    "submitBtn": "Reset Password",
+    "successMsg": "Password reset successful. Please log in.",
+    "invalidTokenMsg": "Reset link is invalid or has expired."
+  },
+  "aiDisclaimer": {
+    "message": "AI-generated answer. Verify with official sources before acting.",
+    "dismiss": "Dismiss"
   },
   "dashboard": {
     "title": "Dashboard",

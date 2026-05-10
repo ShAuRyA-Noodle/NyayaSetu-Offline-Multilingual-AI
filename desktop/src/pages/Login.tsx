@@ -1,11 +1,14 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import { User, Lock, Mail, Phone, MapPin, Eye, EyeOff, Shield, KeyRound, ArrowRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import apiService from '../services/api';
 import AshokaChakra from '../components/decorative/AshokaChakra';
 import ThemedSpinner from '../components/ui/ThemedSpinner';
+import CaptchaWidget from '../components/ui/CaptchaWidget';
+import captchaService from '../services/captcha';
 
 // Defined OUTSIDE component to avoid remount on every keystroke
 const InputField = ({ icon: Icon, ...props }: any) => (
@@ -32,6 +35,17 @@ const Login: React.FC = () => {
   const [officerCode, setOfficerCode] = useState('');
   const [codeValidation, setCodeValidation] = useState<{ valid?: boolean; department?: string; designation?: string; message?: string } | null>(null);
   const [validatingCode, setValidatingCode] = useState(false);
+
+  // Captcha token for the register tab. Cleared whenever the user toggles tabs.
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+
+  // Reset captcha when switching tabs (re-render of widget on next register view)
+  useEffect(() => {
+    if (isLogin) {
+      setCaptchaToken(null);
+      captchaService.clear();
+    }
+  }, [isLogin]);
 
   const validateCode = useCallback(async (code: string) => {
     if (code.length < 4) { setCodeValidation(null); return; }
@@ -84,16 +98,27 @@ const Login: React.FC = () => {
     if (selectedRole === 'officer') {
       if (!officerCode || !codeValidation?.valid) { setError(t('login.codeInvalid')); setLoading(false); return; }
     }
+    if (!captchaToken) {
+      setError(t('login.captchaRequired', 'Please complete the captcha to register.'));
+      setLoading(false);
+      return;
+    }
     try {
+      // NOTE: api.ts agent — please extend `apiService.register` to forward
+      // `captcha_token` to the backend (currently just included in the payload object).
       await apiService.register({
         ...registerData,
         role: selectedRole,
         officer_code: selectedRole === 'officer' ? officerCode : undefined,
+        captcha_token: captchaToken,
       });
       const data = await apiService.login(registerData.username, registerData.password);
       login(data.access_token, data.user);
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || t('login.registerError'));
+      // Reset captcha on failure so user must re-verify
+      setCaptchaToken(null);
+      captchaService.clear();
     } finally { setLoading(false); }
   };
 
@@ -283,6 +308,16 @@ const Login: React.FC = () => {
                   <ArrowRight className="w-4 h-4" />
                 </>}
               </motion.button>
+
+              {/* Forgot password link — bottom of LOGIN tab only */}
+              <div className="text-center pt-1">
+                <Link
+                  to="/forgot-password"
+                  className="text-xs text-slate-400/70 hover:text-[#77CDFF] transition-colors"
+                >
+                  {t('login.forgotPassword', 'Forgot Password?')}
+                </Link>
+              </div>
             </form>
           ) : (
             /* ─── Register Form ─── */
@@ -395,9 +430,17 @@ const Login: React.FC = () => {
                     placeholder="+91-XXXXX" />
                 </div>
               </div>
+              {/* Captcha — required before submit */}
+              <div className="pt-2">
+                <CaptchaWidget
+                  onVerify={(token) => setCaptchaToken(token)}
+                  onError={() => setCaptchaToken(null)}
+                />
+              </div>
+
               <motion.button type="submit"
-                disabled={loading || (selectedRole === 'officer' && !codeValidation?.valid)}
-                className={`w-full flex items-center justify-center gap-2 mt-4 disabled:opacity-50 ${selectedRole === 'officer' ? 'btn-neel' : 'btn-mitti'}`}
+                disabled={loading || !captchaToken || (selectedRole === 'officer' && !codeValidation?.valid)}
+                className={`w-full flex items-center justify-center gap-2 mt-4 disabled:opacity-50 disabled:cursor-not-allowed ${selectedRole === 'officer' ? 'btn-neel' : 'btn-mitti'}`}
                 whileTap={{ scale: 0.98 }}>
                 {loading ? <ThemedSpinner size="sm" /> : <>
                   {t('login.createAccount')}

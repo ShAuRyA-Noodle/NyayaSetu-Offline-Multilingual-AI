@@ -24,6 +24,14 @@ import json
 import logging
 import re
 
+import cachetools
+
+# Sanitizer for citizen-controlled inputs (grievance text flows into the prompt).
+try:
+    from ..generation.prompt_templates import sanitize_user_input
+except ImportError:
+    from generation.prompt_templates import sanitize_user_input
+
 # Type aliases for clarity
 Language = Literal["en", "hi"]
 
@@ -414,11 +422,16 @@ class GrievanceRouter:
         ]
     }
     
-    # Priority keywords for automatic assignment
+    # Priority keywords for automatic assignment.
+    # Includes Hindi-script equivalents so we don't accidentally down-prioritise
+    # a life-threatening Hindi grievance just because it lacks English markers.
     CRITICAL_KEYWORDS = [
+        # English
         "urgent", "emergency", "immediate", "death", "violence", "threat",
         "danger", "critical", "serious injury", "hospital emergency",
-        "life threatening", "grave", "severe"
+        "life threatening", "grave", "severe",
+        # Hindi
+        "मरना", "आपातकाल", "जान", "गंभीर", "चोट", "मौत",
     ]
     
     HIGH_PRIORITY_CATEGORIES = ["payment_delay", "corruption", "service_denial"]
@@ -508,16 +521,32 @@ IMPORTANT:
         """
         self.rag_engine = rag_engine
         self.answer_generator = answer_generator
-        self._cache: Dict[str, GrievanceRoute] = {}
+        # Bounded LRU — was an unbounded dict.
+        self._cache: "cachetools.LRUCache[str, GrievanceRoute]" = cachetools.LRUCache(maxsize=500)
         self._grievance_counter = 0  # For generating unique IDs
-        
-        logger.info("GrievanceRouter initialized")
+
+        logger.info("GrievanceRouter initialized (LRU cache size=500)")
     
+    def invalidate_route_cache(
+        self,
+        grievance_text: str,
+        language: Language = "en",
+    ) -> bool:
+        """Drop a cached routing decision so a re-route picks fresh context.
+
+        Admin-only callers should use this when they need to reroute a
+        grievance (e.g. department reorganisation, mis-classification).
+        Returns True if a cache entry was actually evicted.
+        """
+        cache_key = self._generate_cache_key(grievance_text, language)
+        return self._cache.pop(cache_key, None) is not None
+
     def route_grievance(
         self,
         grievance_text: str,
         language: Language = "en",
-        citizen_location: Optional[str] = None
+        citizen_location: Optional[str] = None,
+        force_refresh: bool = False,
     ) -> GrievanceRoute:
         """
         Route citizen grievance to appropriate department.
@@ -572,9 +601,12 @@ IMPORTANT:
                 f"Grievance too long (max 5000 chars, got {len(grievance_text)})"
             )
         
-        # Check cache
+        # Check cache (skip if admin asked for a re-route).
         cache_key = self._generate_cache_key(grievance_text, language)
-        if cache_key in self._cache:
+        if force_refresh:
+            self._cache.pop(cache_key, None)
+            logger.info("Forced cache refresh for grievance routing")
+        elif cache_key in self._cache:
             logger.info("Cache hit for grievance routing")
             return self._cache[cache_key]
         
@@ -705,24 +737,32 @@ IMPORTANT:
             ]
         ])
         
+        # Sanitize the citizen-supplied text BEFORE it interpolates into the
+        # prompt. Otherwise an attacker who learns the template can inject
+        # `### IGNORE ABOVE...` and re-route grievances.
+        safe_grievance = sanitize_user_input(grievance_text, max_len=5000)
+
         # Select prompt template
         prompt_template = self.ROUTING_PROMPT_HI if language == "hi" else self.ROUTING_PROMPT_EN
         prompt = prompt_template.format(
-            grievance_text=grievance_text,
+            grievance_text=safe_grievance,
             context=context,
             departments=departments,
             categories=categories
         )
-        
+
         # Call LLM with retry logic
         for attempt in range(self.MAX_RETRIES):
             try:
                 # CRITICAL: Access LLM client directly
                 llm_client = self.answer_generator.llm_client
-                
+
+                # temperature=0.0 — routing must be deterministic. The same
+                # grievance text routed twice MUST land in the same dept,
+                # else admins lose confidence in the system.
                 response_dict = llm_client.generate(
                     prompt=prompt,
-                    temperature=0.3,  # Slightly higher for nuanced classification
+                    temperature=0.0,
                     max_tokens=1000
                 )
                 
@@ -877,8 +917,9 @@ IMPORTANT:
             Priority level
         """
         text_lower = grievance_text.lower()
-        
-        # Check for critical keywords
+
+        # Check for critical keywords. Devanagari letters are unaffected by
+        # .lower(), so the same haystack works for English + Hindi entries.
         if any(keyword in text_lower for keyword in self.CRITICAL_KEYWORDS):
             return "critical"
         
@@ -969,14 +1010,16 @@ IMPORTANT:
         """
         if not context_chunks:
             return "No specific context available."
-        
+
         context_parts = []
-        for score, metadata, explanation in context_chunks:
+        for _score, metadata, explanation in context_chunks:
             scheme = metadata.get("scheme_name", "Unknown")
             section = metadata.get("section_type", "general")
-            content = metadata.get("content", explanation)
+            # Read embedded chunk text from metadata['content'] (chunker now
+            # writes it there). Fall back to explanation for resilience.
+            content = metadata.get("content") or explanation
             context_parts.append(f"[{scheme} - {section}]\n{content}\n")
-        
+
         return "\n".join(context_parts)
     
     def _parse_llm_response(self, response: Any) -> Dict[str, Any]:

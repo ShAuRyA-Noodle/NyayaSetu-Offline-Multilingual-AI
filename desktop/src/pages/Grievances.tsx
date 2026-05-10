@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AlertCircle, Send, CheckCircle, Clock, MessageSquare, Star, ChevronDown, ChevronUp, User, Check, X, Inbox, Briefcase, Mic, RotateCcw, Edit3, Info } from 'lucide-react';
+import { AlertCircle, Send, CheckCircle, Clock, MessageSquare, Star, ChevronDown, ChevronUp, User, Check, X, Inbox, Briefcase, Mic, RotateCcw, Edit3, Info, Printer } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
 import PageTransition from '../components/ui/PageTransition';
 import ThemedSpinner from '../components/ui/ThemedSpinner';
+import FileAttachment from '../components/ui/FileAttachment';
 import toast from 'react-hot-toast';
 import apiService from '../services/api';
 import VoiceInputButton from '../components/nyayavaani/VoiceInputButton';
@@ -99,6 +100,7 @@ const SubmitTab: React.FC = () => {
   const [result, setResult] = useState<any>(null);
   // Voice fill tracking: which fields were populated by voice (for visual indicator)
   const [voiceFilled, setVoiceFilled] = useState<{ title?: boolean; description?: boolean; language?: boolean } | null>(null);
+  const [attachments, setAttachments] = useState<File[]>([]);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -124,7 +126,7 @@ const SubmitTab: React.FC = () => {
     setResult(null);
     setVoiceFilled(null);
     try {
-      const response = await apiService.submitGrievance({
+      const payload = {
         description: formData.description.trim(),
         title: formData.title.trim() || undefined,
         citizen_name: formData.citizen_name.trim() || undefined,
@@ -133,15 +135,49 @@ const SubmitTab: React.FC = () => {
         citizen_location: formData.citizen_location.trim() || undefined,
         category: formData.category || undefined,
         language: formData.language,
-      });
-      setResult(response);
+      };
+
+      let response: any;
+      if (attachments.length > 0) {
+        // Multipart upload — use raw axios client until api.ts adds a typed helper.
+        // TODO(api.ts agent): add `submitGrievanceWithFiles(data: SubmitGrievanceData, files: File[])`
+        // that posts multipart/form-data to POST /api/v1/grievances/submit.
+        const fd = new FormData();
+        Object.entries(payload).forEach(([k, v]) => {
+          if (v !== undefined && v !== null) fd.append(k, String(v));
+        });
+        attachments.forEach((f) => fd.append('attachments', f, f.name));
+        const res = await apiService.client.post('/api/v1/grievances/submit', fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: 120000,
+        });
+        response = res.data;
+      } else {
+        response = await apiService.submitGrievance(payload);
+      }
+
+      // Stash the submitted form so the receipt can render after we reset state.
+      setResult({ ...response, _submitted: { ...payload, submitted_at: new Date().toISOString() } });
       // Reset form on success
       setFormData({ ...EMPTY_FORM });
+      setAttachments([]);
     } catch {
       setResult({ error: t('grievances.submitError', 'Failed to submit grievance. Please try again.') });
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handlePrintReceipt = () => {
+    // Toggle a body class so print CSS shows only the receipt; revert after.
+    document.body.classList.add('printing-receipt');
+    const cleanup = () => document.body.classList.remove('printing-receipt');
+    window.addEventListener('afterprint', cleanup, { once: true });
+    setTimeout(() => {
+      window.print();
+      // Fallback for browsers that do not fire afterprint.
+      setTimeout(cleanup, 1500);
+    }, 50);
   };
 
   const handleVoiceTranscription = (text: string, lang: string) => {
@@ -385,6 +421,23 @@ const SubmitTab: React.FC = () => {
             </div>
           </div>
 
+          {/* File attachments */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="h-px flex-1 bg-white/[0.06]" />
+              <span className="text-xs text-slate-500 px-2">Attachments (optional)</span>
+              <div className="h-px flex-1 bg-white/[0.06]" />
+            </div>
+            <FileAttachment
+              files={attachments}
+              onChange={setAttachments}
+              accept="image/*,application/pdf"
+              maxFiles={3}
+              maxSize={10 * 1024 * 1024}
+              disabled={isSubmitting}
+            />
+          </div>
+
           {/* Review checklist before submit */}
           {isValid && !result && (
             <motion.div
@@ -477,6 +530,19 @@ const SubmitTab: React.FC = () => {
                   <p className="text-xs text-slate-400 leading-relaxed">{result.routing_reasoning}</p>
                 </div>
               )}
+
+              {/* Print / download receipt */}
+              <button
+                type="button"
+                onClick={handlePrintReceipt}
+                className="w-full mt-2 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm font-medium text-kora-100 hover:bg-white/[0.06] transition-colors"
+              >
+                <Printer className="w-4 h-4" />
+                Download receipt (PDF)
+              </button>
+              <p className="text-[11px] text-slate-500 text-center -mt-1.5">
+                Opens the print dialog — choose &ldquo;Save as PDF&rdquo;.
+              </p>
             </div>
           )}
           {result?.error && (
@@ -489,6 +555,91 @@ const SubmitTab: React.FC = () => {
           )}
         </div>
       </motion.div>
+
+      {/* ───── Hidden printable receipt — only visible when body has .printing-receipt ───── */}
+      {result && !result.error && (
+        <div id="grievance-receipt" className="grievance-receipt-print" aria-hidden="true">
+          <style>{`
+            /* Hidden by default. The print stylesheet is applied via @media print
+               below; on screen we keep this fully off-canvas. */
+            .grievance-receipt-print {
+              position: fixed; left: -10000px; top: 0; width: 0; height: 0; overflow: hidden;
+            }
+            @media print {
+              body.printing-receipt > *:not(.grievance-receipt-print) { display: none !important; }
+              body.printing-receipt .grievance-receipt-print {
+                position: static !important; left: auto !important; top: auto !important;
+                width: auto !important; height: auto !important; overflow: visible !important;
+                color: #000; background: #fff; padding: 24pt; font-family: Inter, system-ui, sans-serif;
+                font-size: 11pt; line-height: 1.5;
+              }
+              body.printing-receipt .gr-r-title { font-size: 18pt; font-weight: 700; margin-bottom: 4pt; }
+              body.printing-receipt .gr-r-sub { font-size: 10pt; color: #444; margin-bottom: 16pt; }
+              body.printing-receipt .gr-r-row { display: flex; gap: 12pt; margin-bottom: 6pt; }
+              body.printing-receipt .gr-r-label { width: 130pt; color: #555; font-weight: 600; font-size: 9.5pt; text-transform: uppercase; letter-spacing: 0.04em; }
+              body.printing-receipt .gr-r-value { flex: 1; }
+              body.printing-receipt .gr-r-id { font-family: ui-monospace, Menlo, monospace; font-size: 14pt; font-weight: 700; }
+              body.printing-receipt .gr-r-divider { border-top: 1px solid #ccc; margin: 16pt 0; }
+              body.printing-receipt .gr-r-footer { margin-top: 24pt; font-size: 9pt; color: #666; border-top: 1px solid #ccc; padding-top: 12pt; }
+            }
+          `}</style>
+          <h1 className="gr-r-title">NyayaSetu — Grievance Receipt</h1>
+          <p className="gr-r-sub">न्यायसेतु · Official acknowledgement of filing</p>
+
+          <div className="gr-r-row">
+            <span className="gr-r-label">Grievance ID</span>
+            <span className="gr-r-value gr-r-id">{result.grievance_id || '—'}</span>
+          </div>
+          <div className="gr-r-row">
+            <span className="gr-r-label">Submitted on</span>
+            <span className="gr-r-value">
+              {result._submitted?.submitted_at
+                ? new Date(result._submitted.submitted_at).toLocaleString()
+                : new Date().toLocaleString()}
+            </span>
+          </div>
+          <div className="gr-r-row">
+            <span className="gr-r-label">Citizen name</span>
+            <span className="gr-r-value">{result._submitted?.citizen_name || '—'}</span>
+          </div>
+          <div className="gr-r-row">
+            <span className="gr-r-label">Phone</span>
+            <span className="gr-r-value">{result._submitted?.citizen_phone || '—'}</span>
+          </div>
+          <div className="gr-r-row">
+            <span className="gr-r-label">Location</span>
+            <span className="gr-r-value">{result._submitted?.citizen_location || '—'}</span>
+          </div>
+
+          <div className="gr-r-divider" />
+
+          <div className="gr-r-row">
+            <span className="gr-r-label">Department</span>
+            <span className="gr-r-value">{result.department || 'Pending assignment'}</span>
+          </div>
+          <div className="gr-r-row">
+            <span className="gr-r-label">Status</span>
+            <span className="gr-r-value">{(result.status || 'pending').toString().toUpperCase()}</span>
+          </div>
+          <div className="gr-r-row">
+            <span className="gr-r-label">Priority</span>
+            <span className="gr-r-value" style={{ textTransform: 'capitalize' }}>{result.priority || '—'}</span>
+          </div>
+          <div className="gr-r-row">
+            <span className="gr-r-label">Title</span>
+            <span className="gr-r-value">{result._submitted?.title || '—'}</span>
+          </div>
+          <div className="gr-r-row">
+            <span className="gr-r-label">Description</span>
+            <span className="gr-r-value">{result._submitted?.description || '—'}</span>
+          </div>
+
+          <p className="gr-r-footer">
+            Keep this receipt for your records. You can track this grievance any time using the ID above.
+            For questions, contact the assigned department or write to support@nyayasetu.in.
+          </p>
+        </div>
+      )}
     </div>
   );
 };
@@ -513,6 +664,8 @@ const MyGrievancesTab: React.FC = () => {
   const [ratingModal, setRatingModal] = useState<string | null>(null);
   const [rating, setRating] = useState(3);
   const [feedback, setFeedback] = useState('');
+  const [visibleCount, setVisibleCount] = useState(25);
+  const PAGE_SIZE = 25;
 
   useEffect(() => { loadGrievances(); }, []);
 
@@ -607,9 +760,12 @@ const MyGrievancesTab: React.FC = () => {
     </motion.div>
   );
 
+  const visibleGrievances = grievances.slice(0, visibleCount);
+  const hasMoreGrievances = grievances.length > visibleGrievances.length;
+
   return (
     <div className="space-y-4">
-      {grievances.map((g: any, index: number) => {
+      {visibleGrievances.map((g: any, index: number) => {
         const currentStage = getStageIndex(g.status);
         const isRejected = g.status === 'rejected';
 
@@ -822,6 +978,18 @@ const MyGrievancesTab: React.FC = () => {
         </motion.div>
         );
       })}
+
+      {hasMoreGrievances && (
+        <div className="flex justify-center mt-2">
+          <button
+            type="button"
+            onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+            className="px-5 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] text-sm font-medium text-kora-100 hover:bg-white/[0.06] transition-colors"
+          >
+            Show more <span className="text-slate-500 ml-1">({grievances.length - visibleGrievances.length} remaining)</span>
+          </button>
+        </div>
+      )}
 
       {/* Rating Modal */}
       <AnimatePresence>

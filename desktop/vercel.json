@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "//": "TODO: Vercel does not interpolate env vars in static config. Replace 'connect-src https://*' below with the explicit backend origin (e.g. https://api.nyayasetu.example.com) post-deploy. The current wildcard is permissive — tighten before public launch.",
   "version": 2,
   "framework": "vite",
   "buildCommand": "npm run build:web",
@@ -22,17 +23,21 @@
     {
       "source": "/(.*)",
       "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         {
-          "key": "X-Content-Type-Options",
-          "value": "nosniff"
+          "key": "Strict-Transport-Security",
+          "value": "max-age=31536000; includeSubDomains; preload"
         },
         {
-          "key": "X-Frame-Options",
-          "value": "DENY"
+          "key": "Permissions-Policy",
+          "value": "microphone=(self), camera=(), geolocation=()"
         },
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
         {
-          "key": "Referrer-Policy",
-          "value": "strict-origin-when-cross-origin"
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://*; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
         }
       ]
     }

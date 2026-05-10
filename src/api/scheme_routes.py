@@ -7,13 +7,15 @@ Scheme listing, summarization, upload, version management, and analytics.
 import os
 import json
 import time
+import uuid
 import hashlib
 import logging
-from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 
 from .auth_routes import get_current_user, require_role
+from .auth_utils import log_audit_action
 from .schemas import (
     SummarizeRequest, SchemeSummaryResponse,
     BatchSummarizeRequest, BatchSummarizeResponse,
@@ -25,6 +27,10 @@ from .database import get_db
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Scheme Summarizer"])
+
+# Allowed upload extensions and size cap
+_ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt"}
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 # ============================================================================
@@ -113,13 +119,16 @@ async def list_schemes(detailed: bool = False):
 
         return {"schemes": sorted_schemes, "count": len(sorted_schemes)}
     except Exception as e:
-        logger.error(f"List schemes failed: {e}")
+        logger.exception("List schemes failed")
         raise ServiceUnavailableError("Database")
 
 
 @router.post("/api/v1/summarize", response_model=SchemeSummaryResponse)
-async def summarize_scheme(request: SummarizeRequest):
-    """Get structured summary of government scheme. Falls back to LLM if RAG fails."""
+async def summarize_scheme(
+    request: SummarizeRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get structured summary of government scheme. Auth-gated to control LLM cost. Falls back to LLM if RAG fails."""
     # Try RAG-based summarizer first
     try:
         summarizer = get_summarizer()
@@ -188,13 +197,16 @@ async def summarize_scheme(request: SummarizeRequest):
             metadata={"method": "llm_fallback", "confidence": 0.0},
         )
     except Exception as e:
-        logger.error(f"LLM summarizer fallback also failed: {e}")
+        logger.exception("LLM summarizer fallback also failed")
         raise map_module_error(e, "Summarizer")
 
 
 @router.post("/api/v1/summarize/batch", response_model=BatchSummarizeResponse)
-async def batch_summarize_schemes(request: BatchSummarizeRequest):
-    """Batch summarize multiple schemes."""
+async def batch_summarize_schemes(
+    request: BatchSummarizeRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Batch summarize multiple schemes. Auth-gated to control LLM cost."""
     try:
         summarizer = get_summarizer()
         summaries = []
@@ -227,7 +239,7 @@ async def batch_summarize_schemes(request: BatchSummarizeRequest):
             metadata={"success_count": success_count},
         )
     except Exception as e:
-        logger.error(f"Batch summarize failed: {e}")
+        logger.exception("Batch summarize failed")
         raise map_module_error(e, "Summarizer")
 
 
@@ -368,8 +380,13 @@ def _get_or_build_formatted_doc(scheme_id: str, raw_text: str) -> dict:
 
 
 @router.get("/api/v1/schemes/by-name/{scheme_name}/document")
-async def get_scheme_document_by_name(scheme_name: str, formatted: bool = False):
-    """Get the full scheme document text by scheme name (for citizens to read full scheme).
+async def get_scheme_document_by_name(
+    scheme_name: str,
+    formatted: bool = False,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get the full scheme document text by scheme name. Auth-gated to control LLM cost when formatted=true.
+
     Pass ?formatted=true to get an LLM-structured JSON response (cached).
     """
     try:
@@ -467,15 +484,15 @@ async def get_scheme_document_by_name(scheme_name: str, formatted: bool = False)
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Get scheme document failed: {e}")
-        raise HTTPException(500, str(e))
+        logger.exception("Get scheme document failed")
+        raise HTTPException(500, "Internal server error")
 
 
 # Static routes MUST be above /{scheme_id} to avoid path shadowing
 
 @router.get("/api/v1/schemes/my-schemes")
 async def get_my_schemes(current_user: dict = Depends(get_current_user)):
-    """Get schemes assigned to current officer."""
+    """Get schemes assigned to current officer (admins see all)."""
     try:
         with get_db() as conn:
             cursor = conn.cursor()
@@ -498,10 +515,8 @@ async def get_my_schemes(current_user: dict = Depends(get_current_user)):
             schemes = [dict(row) for row in cursor.fetchall()]
         return {"schemes": schemes, "count": len(schemes)}
     except Exception as e:
-        logger.error(f"Get my schemes failed: {e}")
-        raise HTTPException(500, str(e))
-
-
+        logger.exception("Get my schemes failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.get("/api/v1/admin/schemes/analytics", tags=["Admin"])
@@ -528,8 +543,8 @@ async def scheme_analytics(current_user: dict = Depends(require_role("admin"))):
             storage = dict(cursor.fetchone())
         return {"total_schemes": total, "by_department": by_department, "top_uploaders": top_uploaders, "storage": storage}
     except Exception as e:
-        logger.error(f"Analytics failed: {e}")
-        raise HTTPException(500, str(e))
+        logger.exception("Analytics failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.get("/api/v1/schemes/{scheme_id}")
@@ -569,24 +584,23 @@ async def get_scheme_detail(scheme_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Get scheme detail failed: {e}")
-        raise HTTPException(500, str(e))
+        logger.exception("Get scheme detail failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.put("/api/v1/schemes/{scheme_id}/metadata")
 async def update_scheme_metadata(
     scheme_id: str,
     body: UpdateSchemeMetadataRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_role("admin")),
 ):
-    """Update scheme metadata."""
-    logger.info(f"Update metadata request: scheme_id={scheme_id}, body={body.dict(exclude_none=True)}, user={current_user.get('username')}/{current_user.get('role')}")
+    """Update scheme metadata. Admin only."""
+    # Body is intentionally NOT logged below to avoid leaking content. Only field
+    # names are recorded for audit context.
+    logger.info(f"Update metadata request: scheme_id={scheme_id}, fields={list(body.dict(exclude_none=True).keys())}, user={current_user.get('username')}/{current_user.get('role')}")
     try:
         old_scheme_name = None
         with get_db() as conn:
-            if not can_user_manage_scheme(current_user["id"], scheme_id, conn):
-                raise HTTPException(403, "Permission denied")
-
             # Capture old name before rename so we can update RAG DB too
             if body.scheme_name is not None:
                 cursor = conn.cursor()
@@ -643,31 +657,42 @@ async def update_scheme_metadata(
             except Exception as e:
                 logger.warning(f"Failed to update RAG schemes table: {e}")
 
+        log_audit_action(
+            action="scheme_metadata_update",
+            user_id=current_user["id"],
+            target_id=scheme_id,
+            metadata={"fields": list(body.dict(exclude_none=True).keys())},
+        )
+
         return {"success": True, "scheme_id": scheme_id}
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Update metadata failed: {e}")
-        raise HTTPException(500, str(e))
+        logger.exception("Update metadata failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.delete("/api/v1/schemes/{scheme_id}")
-async def delete_scheme(scheme_id: str, current_user: dict = Depends(get_current_user)):
-    """Soft delete (archive) a scheme."""
+async def delete_scheme(
+    scheme_id: str,
+    current_user: dict = Depends(require_role("admin")),
+):
+    """Soft delete (archive) a scheme. Admin only."""
     try:
         with get_db() as conn:
-            if not can_user_manage_scheme(current_user["id"], scheme_id, conn):
-                raise HTTPException(403, "Permission denied")
             conn.execute(
                 "UPDATE schemes_metadata SET status = 'archived', updated_at = CURRENT_TIMESTAMP WHERE scheme_id = ?",
                 (scheme_id,),
             )
+        log_audit_action(
+            action="scheme_delete",
+            user_id=current_user["id"],
+            target_id=scheme_id,
+        )
         return {"success": True, "scheme_id": scheme_id, "status": "archived"}
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Delete scheme failed: {e}")
-        raise HTTPException(500, str(e))
+        logger.exception("Delete scheme failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.get("/api/v1/schemes/{scheme_id}/versions")
@@ -688,8 +713,8 @@ async def get_scheme_versions(scheme_id: str):
             history = [dict(r) for r in cursor.fetchall()]
         return {"scheme_id": scheme_id, "history": history}
     except Exception as e:
-        logger.error(f"Get versions failed: {e}")
-        raise HTTPException(500, str(e))
+        logger.exception("Get versions failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.get("/api/v1/schemes/{scheme_id}/chunks")
@@ -707,46 +732,59 @@ async def get_scheme_chunks(scheme_id: str):
             chunks = [dict(r) for r in cursor.fetchall()]
         return {"scheme_id": scheme_id, "chunks": chunks, "count": len(chunks)}
     except Exception as e:
-        logger.error(f"Get chunks failed: {e}")
-        raise HTTPException(500, str(e))
+        logger.exception("Get chunks failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.post("/api/v1/admin/schemes/upload", tags=["Admin"])
 async def upload_scheme(
     file: UploadFile = File(...),
     scheme_name: str = None,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_role("officer")),
 ):
-    """Upload new government scheme document."""
+    """Upload new government scheme document. Officer or admin only.
+
+    Streams the upload in 64 KB chunks and aborts at 10 MB to prevent memory
+    exhaustion. Filenames are replaced with a UUID + safelisted extension to
+    eliminate path-traversal vectors.
+    """
     from src.core.document_processor import DocumentProcessor
 
     start_time = time.time()
     logger.info(f"Upload started by {current_user['username']}: {file.filename}")
 
+    # Extension safelist
+    original_name = file.filename or "upload"
+    original_ext = Path(original_name).suffix.lower()
+    if original_ext not in _ALLOWED_EXTENSIONS:
+        raise HTTPException(400, f"Only PDF, DOCX, TXT files supported (got '{original_ext}')")
+
+    # Stream into memory with a hard cap. Avoids unbounded read() of a huge file.
+    contents = bytearray()
+    while True:
+        chunk = await file.read(65536)
+        if not chunk:
+            break
+        contents.extend(chunk)
+        if len(contents) > _MAX_UPLOAD_BYTES:
+            raise HTTPException(413, "File too large (max 10MB)")
+
+    file_content = bytes(contents)
+    file_size = len(file_content)
+    file_hash = hashlib.sha256(file_content).hexdigest()
+
+    # Path-traversal-safe filename: random uuid + validated extension only
+    safe_filename = f"{uuid.uuid4().hex}{original_ext}"
+
     with get_db() as conn:
         try:
-            if not file.filename.endswith((".pdf", ".docx", ".txt")):
-                raise HTTPException(400, "Only PDF, DOCX, TXT files supported")
-
-            file_content = await file.read()
-            file_size = len(file_content)
-
-            if file_size > 10 * 1024 * 1024:
-                raise HTTPException(400, f"File too large: {file_size} bytes (max: 10MB)")
-
-            file_hash = hashlib.sha256(file_content).hexdigest()
-
             os.makedirs("temp", exist_ok=True)
-            # Sanitize filename to prevent path traversal
-            safe_filename = os.path.basename(file.filename)
-            if not safe_filename:
-                safe_filename = f"upload_{hashlib.md5(file_content[:256]).hexdigest()[:8]}.txt"
             temp_path = os.path.join("temp", safe_filename)
             with open(temp_path, "wb") as f:
                 f.write(file_content)
 
             processor = DocumentProcessor()
-            text = processor.extract_text(temp_path, file.filename)
+            text = processor.extract_text(temp_path, original_name)
 
             if len(text) < 500:
                 os.remove(temp_path)
@@ -755,7 +793,7 @@ async def upload_scheme(
             chunks = processor.chunk_text(text, max_length=1000)
 
             if not scheme_name:
-                scheme_name = file.filename.rsplit(".", 1)[0].replace("_", " ").replace("-", " ")
+                scheme_name = original_name.rsplit(".", 1)[0].replace("_", " ").replace("-", " ")
 
             scheme_id = generate_scheme_id(scheme_name)
             cursor = conn.cursor()
@@ -769,7 +807,7 @@ async def upload_scheme(
 
             if is_update:
                 if not can_user_manage_scheme(current_user["id"], scheme_id, conn):
-                    log_upload_history(conn, scheme_id, current_user["id"], upload_type, file.filename, file_size, "failed", error_message="Permission denied")
+                    log_upload_history(conn, scheme_id, current_user["id"], upload_type, original_name, file_size, "failed", error_message="Permission denied")
                     raise HTTPException(403, f"You don't have permission to update '{scheme_name}'")
                 current_version = existing_scheme["version"]
                 new_version = current_version + 1
@@ -781,12 +819,13 @@ async def upload_scheme(
                 for i, chunk in enumerate(chunks):
                     rag_engine.add_to_index(text=chunk, metadata={
                         "scheme_name": scheme_name, "scheme_id": scheme_id,
-                        "chunk_index": i, "source_file": file.filename, "version": new_version,
+                        "chunk_index": i, "source_file": original_name, "version": new_version,
                     })
             except Exception as e:
                 os.remove(temp_path)
-                log_upload_history(conn, scheme_id, current_user["id"], upload_type, file.filename, file_size, "failed", error_message=f"Indexing failed: {e}")
-                raise HTTPException(500, f"Failed to index: {e}")
+                log_upload_history(conn, scheme_id, current_user["id"], upload_type, original_name, file_size, "failed", error_message=f"Indexing failed: {e}")
+                logger.exception("RAG indexing failed during upload")
+                raise HTTPException(500, "Failed to index uploaded document")
 
             # Store chunks
             for i, chunk in enumerate(chunks):
@@ -805,7 +844,7 @@ async def upload_scheme(
                         total_chunks = ?, total_characters = ?, file_hash = ?,
                         indexed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
                     WHERE scheme_id = ?
-                """, (new_version, file.filename, file_size, len(chunks), len(text), file_hash, scheme_id))
+                """, (new_version, original_name, file_size, len(chunks), len(text), file_hash, scheme_id))
             else:
                 cursor.execute("""
                     INSERT INTO schemes_metadata
@@ -816,7 +855,7 @@ async def upload_scheme(
                 """, (
                     scheme_id, scheme_name, current_user["id"],
                     current_user["id"] if current_user["role"] == "officer" else None,
-                    file.filename, file.filename.split(".")[-1], file_size,
+                    original_name, original_ext.lstrip("."), file_size,
                     new_version, len(chunks), len(text), file_hash,
                 ))
                 if current_user["role"] == "officer":
@@ -834,18 +873,33 @@ async def upload_scheme(
             """, (
                 scheme_id, new_version, current_user["id"],
                 "update" if is_update else "create",
-                f"{'Updated' if is_update else 'Created'} from {file.filename}",
-                file.filename, file_size, len(chunks), file_hash, len(text),
+                f"{'Updated' if is_update else 'Created'} from {original_name}",
+                original_name, file_size, len(chunks), file_hash, len(text),
             ))
 
             processing_time = int((time.time() - start_time) * 1000)
-            log_upload_history(conn, scheme_id, current_user["id"], upload_type, file.filename, file_size, "success", len(chunks), processing_time)
+            log_upload_history(conn, scheme_id, current_user["id"], upload_type, original_name, file_size, "success", len(chunks), processing_time)
             conn.commit()
-            os.remove(temp_path)
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+
+            log_audit_action(
+                action="scheme_upload",
+                user_id=current_user["id"],
+                target_id=scheme_id,
+                metadata={
+                    "is_update": is_update,
+                    "version": new_version,
+                    "chunks": len(chunks),
+                    "filename": original_name,
+                },
+            )
 
             return {
                 "success": True, "scheme_id": scheme_id, "scheme_name": scheme_name,
-                "version": new_version, "is_update": is_update, "source_file": file.filename,
+                "version": new_version, "is_update": is_update, "source_file": original_name,
                 "chunks_added": len(chunks), "total_characters": len(text),
                 "file_size": file_size, "processing_time_ms": processing_time,
                 "uploaded_by": current_user["username"],
@@ -854,37 +908,8 @@ async def upload_scheme(
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Upload failed: {e}")
-            raise HTTPException(500, f"Upload failed: {e}")
-
-
-@router.get("/api/v1/schemes/my-schemes")
-async def get_my_schemes(current_user: dict = Depends(get_current_user)):
-    """Get schemes assigned to current officer."""
-    try:
-        with get_db() as conn:
-            cursor = conn.cursor()
-            if current_user["role"] == "admin":
-                cursor.execute("""
-                    SELECT scheme_id, scheme_name, version, status, total_chunks,
-                           category, department, view_count, query_count, created_at, updated_at
-                    FROM schemes_metadata ORDER BY updated_at DESC
-                """)
-            else:
-                cursor.execute("""
-                    SELECT sm.scheme_id, sm.scheme_name, sm.version, sm.status,
-                           sm.total_chunks, sm.category, sm.department,
-                           sm.view_count, sm.query_count, sm.created_at, sm.updated_at
-                    FROM schemes_metadata sm
-                    JOIN scheme_assignments sa ON sm.scheme_id = sa.scheme_id
-                    WHERE sa.officer_id = ? AND sa.is_active = TRUE
-                    ORDER BY sm.updated_at DESC
-                """, (current_user["id"],))
-            schemes = [dict(row) for row in cursor.fetchall()]
-        return {"schemes": schemes, "count": len(schemes)}
-    except Exception as e:
-        logger.error(f"Get my schemes failed: {e}")
-        raise HTTPException(500, str(e))
+            logger.exception("Upload failed")
+            raise HTTPException(500, "Upload failed")
 
 
 @router.get("/api/v1/schemes/{scheme_id}/history")
@@ -914,8 +939,8 @@ async def get_scheme_history(scheme_id: str, current_user: dict = Depends(get_cu
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Get scheme history failed: {e}")
-        raise HTTPException(500, str(e))
+        logger.exception("Get scheme history failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.post("/api/v1/admin/schemes/{scheme_id}/assign", tags=["Admin"])
@@ -946,12 +971,18 @@ async def assign_scheme_officer(
                     revoked_at = NULL,
                     revoked_by = NULL
             """, (scheme_id, officer_id, current_user["id"], can_edit, can_delete))
+        log_audit_action(
+            action="scheme_assign_officer",
+            user_id=current_user["id"],
+            target_id=scheme_id,
+            metadata={"officer_id": officer_id, "can_edit": can_edit, "can_delete": can_delete},
+        )
         return {"success": True, "scheme_id": scheme_id, "officer_id": officer_id}
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Assign failed: {e}")
-        raise HTTPException(500, str(e))
+        logger.exception("Assign failed")
+        raise HTTPException(500, "Internal server error")
 
 
 @router.delete("/api/v1/admin/schemes/{scheme_id}/unassign/{officer_id}", tags=["Admin"])
@@ -963,35 +994,13 @@ async def unassign_scheme_officer(
     try:
         with get_db() as conn:
             conn.execute("UPDATE scheme_assignments SET is_active = FALSE WHERE scheme_id = ? AND officer_id = ?", (scheme_id, officer_id))
+        log_audit_action(
+            action="scheme_unassign_officer",
+            user_id=current_user["id"],
+            target_id=scheme_id,
+            metadata={"officer_id": officer_id},
+        )
         return {"success": True, "scheme_id": scheme_id, "officer_id": officer_id}
     except Exception as e:
-        logger.error(f"Unassign failed: {e}")
-        raise HTTPException(500, str(e))
-
-
-@router.get("/api/v1/admin/schemes/analytics", tags=["Admin"])
-async def scheme_analytics(current_user: dict = Depends(require_role("admin"))):
-    """Scheme analytics."""
-    try:
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) as cnt FROM schemes_metadata WHERE status = 'active'")
-            total = cursor.fetchone()["cnt"]
-            cursor.execute("""
-                SELECT department, COUNT(*) as cnt FROM schemes_metadata
-                WHERE status = 'active' AND department IS NOT NULL
-                GROUP BY department ORDER BY cnt DESC
-            """)
-            by_department = [dict(r) for r in cursor.fetchall()]
-            cursor.execute("""
-                SELECT u.username, COUNT(*) as uploads FROM upload_history uh
-                JOIN users u ON uh.uploaded_by = u.id WHERE uh.status = 'success'
-                GROUP BY u.username ORDER BY uploads DESC LIMIT 10
-            """)
-            top_uploaders = [dict(r) for r in cursor.fetchall()]
-            cursor.execute("SELECT SUM(file_size) as total_bytes, SUM(total_chunks) as total_chunks FROM schemes_metadata WHERE status = 'active'")
-            storage = dict(cursor.fetchone())
-        return {"total_schemes": total, "by_department": by_department, "top_uploaders": top_uploaders, "storage": storage}
-    except Exception as e:
-        logger.error(f"Analytics failed: {e}")
-        raise HTTPException(500, str(e))
+        logger.exception("Unassign failed")
+        raise HTTPException(500, "Internal server error")

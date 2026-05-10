@@ -21,10 +21,13 @@ from .auth_utils import (
     record_failed_login, clear_failed_attempts,
     store_session_enhanced, get_user_sessions,
     revoke_session, revoke_all_sessions, update_session_activity,
+    invalidate_all_sessions_except,
     create_password_reset_token, validate_reset_token,
     mark_reset_token_used, change_user_password,
     log_audit, verify_password,
+    ACCESS_TOKEN_EXPIRE_HOURS,
 )
+from .middleware import get_client_ip
 from .schemas import (
     LoginRequest, LoginResponse,
     RegisterRequest, RegisterResponse,
@@ -198,7 +201,7 @@ async def register(request: RegisterRequest, req: Request):
             user_id=user["id"], username=user["username"], role=user["role"],
             action_type="register", resource_type="user", resource_id=str(user["id"]),
             endpoint_path="/api/v1/auth/register", request_method="POST",
-            ip_address=req.client.host if req.client else None,
+            ip_address=get_client_ip(req),
             status_code=200,
         )
 
@@ -238,7 +241,7 @@ async def login(request: LoginRequest, req: Request):
             log_audit(
                 username=request.username, action_type="login_failed",
                 endpoint_path="/api/v1/auth/login", request_method="POST",
-                ip_address=req.client.host if req.client else None,
+                ip_address=get_client_ip(req),
                 status_code=401, error_message="Invalid credentials",
             )
             raise HTTPException(
@@ -250,7 +253,7 @@ async def login(request: LoginRequest, req: Request):
         # Clear failed attempts on success
         clear_failed_attempts(user["id"])
 
-        access_token_expires = timedelta(hours=4)
+        access_token_expires = timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
         access_token = create_access_token(
             data={
                 "user_id": user["id"],
@@ -263,7 +266,7 @@ async def login(request: LoginRequest, req: Request):
         expires_at = datetime.utcnow() + access_token_expires
 
         # Enhanced session with device tracking
-        ip_address = req.client.host if req.client else None
+        ip_address = get_client_ip(req)
         user_agent = req.headers.get("user-agent", "")
         store_session_enhanced(
             user["id"], access_token, expires_at,
@@ -325,7 +328,7 @@ async def logout(
             user_id=current_user["id"], username=current_user["username"],
             role=current_user["role"], action_type="logout",
             endpoint_path="/api/v1/auth/logout", request_method="POST",
-            ip_address=req.client.host if req.client else None,
+            ip_address=get_client_ip(req),
             status_code=200,
         )
 
@@ -387,8 +390,14 @@ async def check_auth(current_user: dict = Depends(get_current_user)):
 async def change_password(
     request: ChangePasswordRequest,
     current_user: dict = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
-    """Change password with policy enforcement and history check."""
+    """Change password with policy enforcement and history check.
+
+    On success, all OTHER active sessions for this user are invalidated
+    (the current session stays active so the user is not logged out of
+    the device they just changed the password from).
+    """
     # Verify current password
     with get_db() as conn:
         cursor = conn.cursor()
@@ -417,6 +426,11 @@ async def change_password(
         )
 
     change_user_password(current_user["id"], request.new_password)
+
+    # Revoke other sessions for security (keep current session alive).
+    invalidate_all_sessions_except(
+        current_user["id"], credentials.credentials, reason="password_change"
+    )
 
     return {"success": True, "message": "Password changed successfully"}
 
@@ -499,11 +513,18 @@ async def refresh_token(
     current_user: dict = Depends(get_current_user),
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
-    """Refresh an expiring JWT token."""
+    """Refresh an expiring JWT token.
+
+    Note: This implementation continues the existing sliding-session model
+    (a still-valid access token can be exchanged for a new one). True
+    access/refresh token separation requires a sessions.is_refresh column
+    migration which is out of scope for this fix; tokens now carry iat/nbf/jti
+    claims which lay the groundwork.
+    """
     old_token = credentials.credentials
 
-    # Create new token
-    access_token_expires = timedelta(hours=24)
+    # Create new token using configured expiry (was hardcoded 24h).
+    access_token_expires = timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
     new_token = create_access_token(
         data={
             "user_id": current_user["id"],
@@ -514,7 +535,7 @@ async def refresh_token(
     )
 
     expires_at = datetime.utcnow() + access_token_expires
-    ip_address = req.client.host if req.client else None
+    ip_address = get_client_ip(req)
     user_agent = req.headers.get("user-agent", "")
 
     # Store new session, invalidate old

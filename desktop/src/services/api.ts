@@ -1,4 +1,15 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
+import toast from 'react-hot-toast';
+
+// Environment guard: warn (do not crash) if production lacks VITE_API_URL
+if (!import.meta.env.VITE_API_URL && import.meta.env.PROD === true) {
+  // eslint-disable-next-line no-console
+  console.error(
+    '[NyayaSetu] VITE_API_URL is not defined in a production build. ' +
+      'Falling back to http://localhost:8001 — this will NOT work for end users. ' +
+      'Set VITE_API_URL in your Vercel environment variables.'
+  );
+}
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
 
@@ -20,17 +31,37 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor: handle 401 globally
+// Response interceptor: surface user-friendly toasts and redirect on 401
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status;
+    const isNetworkError = !error.response;
+
+    if (status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      if (window.location.hash !== '#/login') {
-        window.location.hash = '#/login';
+      // BrowserRouter-safe redirect (replaces previous hash-based redirect)
+      if (window.location.pathname !== '/login') {
+        window.location.assign('/login');
       }
+    } else if (status === 403) {
+      toast.error('Permission denied');
+    } else if (status === 422) {
+      const detail = error.response?.data?.detail;
+      const msg =
+        Array.isArray(detail) && detail.length > 0
+          ? detail.map((d: any) => d.msg || d).join(', ')
+          : typeof detail === 'string'
+          ? detail
+          : 'Validation error';
+      toast.error(msg);
+    } else if (typeof status === 'number' && status >= 500) {
+      toast.error('Server error. Please try again in a moment.');
+    } else if (isNetworkError) {
+      toast.error('Network error. Check your connection.');
     }
+
     return Promise.reject(error);
   }
 );
@@ -40,6 +71,9 @@ api.interceptors.response.use(
 // ============================================================================
 
 export const apiService = {
+  // ---- Raw axios client (for blob fetches with auth, etc.) ----
+  client: api,
+
   // ---- Health ----
   checkHealth: async () => (await api.get('/health')).data,
 
@@ -51,6 +85,7 @@ export const apiService = {
     username: string; email: string; password: string;
     phone?: string; role?: string; location?: string; preferred_language?: string;
     officer_code?: string; designation?: string;
+    captcha_token?: string;
   }) => (await api.post('/api/v1/auth/register', data)).data,
 
   logout: async () => (await api.post('/api/v1/auth/logout')).data,
@@ -136,6 +171,27 @@ export const apiService = {
     citizen_phone?: string; citizen_email?: string; citizen_location?: string;
     category?: string; language?: string;
   }) => (await api.post('/api/v1/grievances/submit', data)).data,
+
+  // Multipart variant supporting up to N attachments. Backend route may need
+  // to accept files via UploadFile[] — see grievance_routes TODO.
+  submitGrievanceWithFiles: async (
+    data: {
+      description: string; title?: string; citizen_name?: string;
+      citizen_phone?: string; citizen_email?: string; citizen_location?: string;
+      category?: string; language?: string;
+    },
+    files: File[],
+  ) => {
+    const fd = new FormData();
+    Object.entries(data).forEach(([k, v]) => {
+      if (v !== undefined && v !== null) fd.append(k, String(v));
+    });
+    files.forEach((f) => fd.append('attachments', f, f.name));
+    return (await api.post('/api/v1/grievances/submit', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+    })).data;
+  },
 
   getMyGrievances: async () => (await api.get('/api/v1/grievances/my')).data,
 

@@ -7,6 +7,7 @@ import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, L
 import apiService from '../services/api';
 import PageTransition from '../components/ui/PageTransition';
 import ThemedSpinner from '../components/ui/ThemedSpinner';
+import { useDialog } from '../components/ui/ConfirmDialog';
 
 const AdminDashboard: React.FC = () => {
   const { t } = useTranslation();
@@ -332,6 +333,7 @@ const UsersTab: React.FC = () => {
   const [search, setSearch] = useState('');
   const [editUser, setEditUser] = useState<any>(null);
   const [editRole, setEditRole] = useState('');
+  const { confirm, ConfirmHost } = useDialog();
 
   useEffect(() => { loadUsers(); }, [roleFilter]);
 
@@ -344,7 +346,13 @@ const UsersTab: React.FC = () => {
   };
 
   const handleDisable = async (userId: number) => {
-    if (!confirm('Disable this user?')) return;
+    const ok = await confirm({
+      title: 'Disable this user?',
+      message: 'The user will lose access immediately. They can be re-enabled later from this page.',
+      confirmText: 'Disable',
+      tone: 'danger',
+    });
+    if (!ok) return;
     try { await apiService.disableUser(userId); loadUsers(); } catch { toast.error('Action failed'); }
   };
 
@@ -469,6 +477,8 @@ const UsersTab: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ConfirmHost />
     </div>
   );
 };

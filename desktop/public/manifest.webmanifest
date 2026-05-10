@@ -1,0 +1,35 @@
+{
+  "name": "NyayaSetu",
+  "short_name": "NyayaSetu",
+  "description": "AI-powered citizen governance platform for India.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#060B18",
+  "theme_color": "#060B18",
+  "lang": "en-IN",
+  "dir": "ltr",
+  "categories": ["government", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "_TODO": "Generate /public/icon-192.png and /public/icon-512.png from favicon.svg. Recommended: use 'pwa-asset-generator' or 'real-favicon-generator' to produce maskable icons that respect the safe zone (10% padding). The references above are kept so the manifest is valid as soon as the PNGs land in /public."
+}

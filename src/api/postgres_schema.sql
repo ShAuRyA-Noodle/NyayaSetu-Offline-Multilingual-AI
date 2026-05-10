@@ -276,6 +276,7 @@ CREATE TABLE IF NOT EXISTS grievances (
     status                     TEXT DEFAULT 'pending',
     assigned_officer_id        INTEGER,
     assigned_officer_name      TEXT,
+    submitted_by_officer_id    INTEGER REFERENCES users(id),
     submitted_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     accepted_at                TIMESTAMP,
     assigned_at                TIMESTAMP,
@@ -334,19 +335,23 @@ CREATE TABLE IF NOT EXISTS grievance_comments (
     commenter_type TEXT NOT NULL,
     commenter_name TEXT,
     comment_text   TEXT NOT NULL,
-    is_internal    BOOLEAN DEFAULT FALSE,
-    timestamp      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    author_id      INTEGER REFERENCES users(id),
-    author_role    TEXT,
-    author_name    TEXT,
-    comment_type   TEXT DEFAULT 'note',
-    is_public      BOOLEAN DEFAULT TRUE,
-    is_pinned      BOOLEAN DEFAULT FALSE,
-    updated_at     TIMESTAMP,
-    edited_at      TIMESTAMP,
-    created_at     TIMESTAMP
+    is_internal       BOOLEAN DEFAULT FALSE,
+    timestamp         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    author_id         INTEGER REFERENCES users(id),
+    author_role       TEXT,
+    author_name       TEXT,
+    author_department TEXT,
+    comment_type      TEXT DEFAULT 'note',
+    is_public         BOOLEAN DEFAULT TRUE,
+    is_pinned         BOOLEAN DEFAULT FALSE,
+    updated_at        TIMESTAMP,
+    edited_at         TIMESTAMP,
+    created_at        TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_comments_grievance ON grievance_comments(grievance_id);
+CREATE INDEX IF NOT EXISTS idx_comments_grievance     ON grievance_comments(grievance_id);
+CREATE INDEX IF NOT EXISTS idx_comments_author_dept   ON grievance_comments(author_department);
+CREATE INDEX IF NOT EXISTS idx_grievances_submitted_by_officer
+    ON grievances(submitted_by_officer_id);
 
 -- --- SLA Configuration ------------------------------------------------------
 CREATE TABLE IF NOT EXISTS sla_config (

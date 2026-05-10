@@ -95,10 +95,15 @@ class SchemeChunker:
                         'scheme_name': scheme_name,
                         'department': department,
                         'section_type': 'eligibility',
-                        'chunk_id': f"{scheme_name}_eligibility"
+                        'chunk_id': f"{scheme_name}_eligibility",
+                        # Embed the actual chunk text so downstream callers
+                        # (summarizer/notice/grievance _prepare_context) can
+                        # read it via metadata['content']. Without this they
+                        # only see the human-readable banner string.
+                        'content': scheme['eligibility'],
                     }
                     chunks.append((chunk_text, metadata))
-                
+
                 # Create chunk for BENEFITS section
                 if scheme['benefits'] and scheme['benefits'].strip():
                     chunk_text = self._format_chunk(
@@ -110,10 +115,11 @@ class SchemeChunker:
                         'scheme_name': scheme_name,
                         'department': department,
                         'section_type': 'benefits',
-                        'chunk_id': f"{scheme_name}_benefits"
+                        'chunk_id': f"{scheme_name}_benefits",
+                        'content': scheme['benefits'],
                     }
                     chunks.append((chunk_text, metadata))
-                
+
                 # Create chunk for PROCESS section
                 if scheme['process'] and scheme['process'].strip():
                     chunk_text = self._format_chunk(
@@ -125,7 +131,8 @@ class SchemeChunker:
                         'scheme_name': scheme_name,
                         'department': department,
                         'section_type': 'process',
-                        'chunk_id': f"{scheme_name}_process"
+                        'chunk_id': f"{scheme_name}_process",
+                        'content': scheme['process'],
                     }
                     chunks.append((chunk_text, metadata))
             

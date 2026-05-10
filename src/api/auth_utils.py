@@ -14,6 +14,7 @@ import os
 import re
 import json
 import uuid
+import hashlib
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
@@ -29,16 +30,36 @@ logger = logging.getLogger(__name__)
 # CONFIGURATION
 # ============================================================================
 
-SECRET_KEY = os.environ.get(
-    "NYAYASETU_SECRET_KEY",
-    "nyayasetu-dev-secret-key-CHANGE-IN-PRODUCTION"
+_DEFAULT_SECRET = "nyayasetu-dev-secret-key-CHANGE-IN-PRODUCTION"
+
+# Accept canonical JWT_SECRET_KEY first, fall back to legacy NYAYASETU_SECRET_KEY.
+SECRET_KEY = (
+    os.environ.get("JWT_SECRET_KEY")
+    or os.environ.get("NYAYASETU_SECRET_KEY")
+    or _DEFAULT_SECRET
 )
-if SECRET_KEY == "nyayasetu-dev-secret-key-CHANGE-IN-PRODUCTION":
-    logger.warning(
-        "SECURITY: Using default secret key. Set NYAYASETU_SECRET_KEY env var in production!"
+
+_ENV = os.environ.get("ENV", "development").strip().lower()
+if _ENV == "production" and (not SECRET_KEY or SECRET_KEY == _DEFAULT_SECRET):
+    raise RuntimeError(
+        "SECURITY: JWT_SECRET_KEY must be set to a strong random value in production. "
+        "Refusing to start with default/missing secret."
     )
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_HOURS = 4
+if SECRET_KEY == _DEFAULT_SECRET:
+    logger.warning(
+        "SECURITY: Using default secret key. Set JWT_SECRET_KEY env var in production!"
+    )
+
+ALGORITHM = os.environ.get("JWT_ALGORITHM", "HS256")
+
+# Token expiry. Read from JWT_EXPIRY_HOURS, default 24h.
+try:
+    ACCESS_TOKEN_EXPIRE_HOURS = int(os.environ.get("JWT_EXPIRY_HOURS", "24"))
+except (TypeError, ValueError):
+    ACCESS_TOKEN_EXPIRE_HOURS = 24
+
+# Refresh tokens (separate, longer-lived).
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.environ.get("JWT_REFRESH_EXPIRY_DAYS", "7"))
 
 
 # ============================================================================
@@ -61,12 +82,33 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 # JWT TOKEN UTILITIES
 # ============================================================================
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """Create JWT access token."""
+def create_access_token(
+    data: dict,
+    expires_delta: Optional[timedelta] = None,
+    token_type: str = "access",
+) -> str:
+    """Create JWT token with iat, nbf, exp, jti, type claims."""
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS))
-    to_encode.update({"exp": expire})
+    now = datetime.utcnow()
+    if expires_delta is None:
+        if token_type == "refresh":
+            expires_delta = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+        else:
+            expires_delta = timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+    expire = now + expires_delta
+    to_encode.update({
+        "iat": now,
+        "nbf": now,
+        "exp": expire,
+        "jti": uuid.uuid4().hex,
+        "type": token_type,
+    })
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def create_refresh_token(data: dict) -> str:
+    """Create a long-lived refresh token (separate JTI, type=refresh)."""
+    return create_access_token(data, token_type="refresh")
 
 
 def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
@@ -373,11 +415,15 @@ def check_account_lockout(username: str) -> Optional[str]:
 
 
 def record_failed_login(username: str):
-    """Record a failed login attempt, lock account if threshold exceeded."""
+    """Record a failed login attempt, lock account if threshold exceeded.
+
+    If a previous lock has expired, reset the counter before incrementing
+    so users don't get re-locked instantly on a single wrong attempt.
+    """
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, failed_login_attempts FROM users
+            SELECT id, failed_login_attempts, locked_until FROM users
             WHERE (username = ? OR email = ?) AND is_active = TRUE
         """, (username, username))
         row = cursor.fetchone()
@@ -385,7 +431,19 @@ def record_failed_login(username: str):
         if not row:
             return
 
-        attempts = (row["failed_login_attempts"] or 0) + 1
+        prior_attempts = row["failed_login_attempts"] or 0
+        # If locked_until exists and is in the past, the lock has expired:
+        # reset attempts before counting this new failure.
+        locked_until_str = row["locked_until"]
+        if locked_until_str:
+            try:
+                locked_until = datetime.fromisoformat(locked_until_str)
+                if datetime.utcnow() >= locked_until:
+                    prior_attempts = 0
+            except (ValueError, TypeError):
+                prior_attempts = 0
+
+        attempts = prior_attempts + 1
 
         if attempts >= MAX_FAILED_ATTEMPTS:
             locked_until = datetime.utcnow() + timedelta(minutes=LOCKOUT_MINUTES)
@@ -396,7 +454,7 @@ def record_failed_login(username: str):
             logger.warning(f"Account locked for user: {username}")
         else:
             conn.execute(
-                "UPDATE users SET failed_login_attempts = ? WHERE id = ?",
+                "UPDATE users SET failed_login_attempts = ?, locked_until = NULL WHERE id = ?",
                 (attempts, row["id"]),
             )
 
@@ -491,32 +549,62 @@ def update_session_activity(token: str):
         )
 
 
+def invalidate_all_sessions_except(user_id: int, keep_token: str, reason: str = "password_change"):
+    """Revoke every active session for a user EXCEPT the one identified by keep_token.
+
+    Used after password change to lock other devices out while keeping the
+    current session alive.
+    """
+    revoke_all_sessions(user_id, except_token=keep_token, reason=reason)
+
+
+def revoke_all_user_sessions(user_id: int, reason: str = "admin_disable"):
+    """Revoke every active session for a user (no exceptions).
+
+    Intended to be called by admin routes when disabling a user account.
+    Note: admin route file is owned by another agent; that file should call
+    this helper after flipping is_active=FALSE on the target user.
+    """
+    revoke_all_sessions(user_id, except_token=None, reason=reason)
+
+
 # ============================================================================
 # PASSWORD RESET
 # ============================================================================
 
+def _hash_reset_token(token: str) -> str:
+    """SHA-256 hash a reset token for at-rest storage."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 def create_password_reset_token(user_id: int) -> str:
-    """Generate a password reset token (valid for 1 hour)."""
-    token = uuid.uuid4().hex
+    """Generate a password reset token (valid for 1 hour).
+
+    The raw token is returned to the caller (to be emailed to the user).
+    Only the SHA-256 hash is persisted to the DB.
+    """
+    raw_token = uuid.uuid4().hex
+    token_hash = _hash_reset_token(raw_token)
     expires_at = datetime.utcnow() + timedelta(hours=1)
 
     with get_db() as conn:
         conn.execute("""
             INSERT INTO password_reset_tokens (user_id, token, expires_at)
             VALUES (?, ?, ?)
-        """, (user_id, token, expires_at.isoformat()))
+        """, (user_id, token_hash, expires_at.isoformat()))
 
-    return token
+    return raw_token
 
 
 def validate_reset_token(token: str) -> Optional[int]:
-    """Validate reset token, return user_id or None."""
+    """Validate reset token (compares SHA-256 hash), return user_id or None."""
+    token_hash = _hash_reset_token(token)
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT user_id, expires_at, used
             FROM password_reset_tokens WHERE token = ?
-        """, (token,))
+        """, (token_hash,))
         row = cursor.fetchone()
 
     if not row:
@@ -529,10 +617,11 @@ def validate_reset_token(token: str) -> Optional[int]:
 
 
 def mark_reset_token_used(token: str):
-    """Mark reset token as used."""
+    """Mark reset token as used (looked up by SHA-256 hash)."""
+    token_hash = _hash_reset_token(token)
     with get_db() as conn:
         conn.execute(
-            "UPDATE password_reset_tokens SET used = 1 WHERE token = ?", (token,)
+            "UPDATE password_reset_tokens SET used = 1 WHERE token = ?", (token_hash,)
         )
 
 
@@ -581,3 +670,39 @@ def log_audit(
             ))
     except Exception as e:
         logger.error(f"Failed to write audit log: {e}")
+
+
+def log_audit_action(
+    action: str,
+    user_id: Optional[int] = None,
+    target_id: Optional[Any] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+):
+    """Lightweight wrapper around log_audit() for privileged-action logging.
+
+    Other agents will call this from their route files (admin, scheme,
+    grievance, etc.). Resource_type is left generic; metadata is serialized
+    into the error_message column when no dedicated metadata column exists.
+
+    Args:
+        action: short verb describing the action (e.g. "user_disable",
+                "scheme_publish", "officer_code_create").
+        user_id: id of the actor (admin/officer performing the action).
+        target_id: id of the resource being acted on (e.g. target user id).
+        metadata: extra context (dict will be JSON-serialized).
+    """
+    serialized = None
+    if metadata:
+        try:
+            serialized = json.dumps(metadata, default=str)
+        except (TypeError, ValueError):
+            serialized = str(metadata)
+    try:
+        log_audit(
+            user_id=user_id,
+            action_type=action,
+            resource_id=str(target_id) if target_id is not None else None,
+            error_message=serialized,
+        )
+    except Exception as e:
+        logger.error(f"log_audit_action failed: {e}")

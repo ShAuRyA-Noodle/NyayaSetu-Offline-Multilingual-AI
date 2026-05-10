@@ -8,14 +8,15 @@ import time
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
+from .auth_routes import get_current_user, require_role
 from .schemas import (
     HealthResponse, StatsResponse,
     AskRequest, AskResponse,
 )
 from .errors import (
-    ServiceUnavailableError, LLMUnavailableError, map_module_error,
+    LLMUnavailableError, map_module_error,
 )
 from .dependencies import (
     get_rag_engine, get_answer_generator,
@@ -87,8 +88,11 @@ async def root():
 
 
 @router.get("/stats", response_model=StatsResponse, tags=["Statistics"])
-async def get_stats(request: Request):
-    """API statistics."""
+async def get_stats(
+    request: Request,
+    current_user: dict = Depends(require_role("admin")),
+):
+    """API statistics. Admin only."""
     uptime = time.time() - request.app.state.startup_time
     cache_stats = {}
 
@@ -111,8 +115,11 @@ async def get_stats(request: Request):
 # ============================================================================
 
 @router.post("/api/v1/ask", response_model=AskResponse, tags=["RAG Q&A"])
-async def ask_question(request: AskRequest):
-    """Ask questions about government schemes using RAG."""
+async def ask_question(
+    request: AskRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Ask questions about government schemes using RAG. Auth required (LLM cost gate)."""
     try:
         start_time = time.time()
 

@@ -3,6 +3,7 @@ ASR Engine — Speech-to-Text using Sarvam AI (online) or faster-whisper (offlin
 """
 
 import logging
+import os
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
@@ -13,7 +14,25 @@ from .config import NyayaVaaniConfig
 from .language_registry import SUPPORTED_LANGUAGES
 from .audio_utils import convert_to_wav, validate_audio_file
 
+# Stable language detection. Without this seed, langdetect's results vary
+# between runs which breaks deterministic transcription routing.
+try:
+    from langdetect import DetectorFactory
+    DetectorFactory.seed = 0
+except ImportError:
+    # langdetect is optional — Sarvam returns its own language code, and
+    # whisper has its own detector. Just log and continue.
+    logging.getLogger(__name__).debug("langdetect unavailable — skipping seed")
+
 logger = logging.getLogger(__name__)
+
+
+def _sarvam_timeout() -> float:
+    """Configurable Sarvam ASR timeout. Defaults to 30s."""
+    try:
+        return float(os.environ.get("SARVAM_TIMEOUT_SEC", "30"))
+    except ValueError:
+        return 30.0
 
 
 @dataclass
@@ -55,15 +74,22 @@ class ASREngine:
     async def _transcribe_sarvam(
         self, audio_path: Path, language_hint: Optional[str] = None
     ) -> TranscriptionResult:
-        """Transcribe using Sarvam AI Saarika/Saaras API (multipart file upload)."""
-        lang_code = "hi-IN"
+        """Transcribe using Sarvam AI Saarika/Saaras API (multipart file upload).
+
+        language_hint policy: if the caller explicitly supplies a supported
+        language, honour it. Otherwise we let Sarvam auto-detect rather than
+        biasing every transcription to hi-IN — that mis-routed Tamil and
+        Bengali speakers in the field.
+        """
         if language_hint and language_hint in SUPPORTED_LANGUAGES:
             lang_code = SUPPORTED_LANGUAGES[language_hint].sarvam_asr_code
+        else:
+            lang_code = "auto"
 
         audio_bytes = audio_path.read_bytes()
         filename = audio_path.name
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=_sarvam_timeout()) as client:
             response = await client.post(
                 f"{self.config.sarvam_base_url}/speech-to-text",
                 headers={

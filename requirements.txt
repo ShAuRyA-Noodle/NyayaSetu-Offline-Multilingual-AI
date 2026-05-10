@@ -5,13 +5,14 @@
 # =========================
 
 # --- Web framework ---
-fastapi==0.128.0
+fastapi==0.118.0
 uvicorn[standard]==0.40.0
 python-multipart==0.0.21
-starlette==0.50.0
+starlette==0.41.3
 
 # --- Validation ---
-pydantic==2.12.5
+pydantic==2.10.4
+pydantic-settings==2.6.1
 email-validator==2.3.0
 
 # --- Database ---
@@ -20,9 +21,11 @@ email-validator==2.3.0
 psycopg2-binary==2.9.11
 
 # --- Auth ---
-bcrypt==5.0.0
+bcrypt==4.2.1
+# python-jose: used by src/api/auth_utils.py (`from jose import JWTError, jwt`).
+# PyJWT is NOT imported anywhere — leaving it out. If the code is migrated
+# to `import jwt` in the future, re-add PyJWT and drop python-jose.
 python-jose[cryptography]==3.5.0
-PyJWT==2.11.0
 
 # --- HTTP clients ---
 requests==2.32.5
@@ -38,11 +41,18 @@ python-docx==1.2.0
 # --- RAG / Embeddings ---
 sentence-transformers==5.2.0
 faiss-cpu==1.13.2
-numpy==2.4.0
+numpy==2.2.0
+cachetools==5.5.0
 
 # --- Voice (Sarvam cloud API — no local model needed) ---
 aiofiles==25.1.0
 soundfile==0.13.1
+
+# --- Scheduling (SLA scheduler) ---
+apscheduler==3.10.4
+
+# --- Observability ---
+sentry-sdk[fastapi]==2.18.0
 
 # --- Utilities ---
 python-dotenv==1.2.2
