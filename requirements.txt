@@ -28,7 +28,7 @@ bcrypt==4.2.1
 python-jose[cryptography]==3.5.0
 
 # --- HTTP clients ---
-requests>=2.33.0
+requests>=2.34.2
 httpx==0.28.1
 
 # --- LLM (Groq Cloud) ---
