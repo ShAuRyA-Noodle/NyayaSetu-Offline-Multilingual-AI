@@ -5,23 +5,23 @@
 # =========================
 
 # --- Web framework ---
-fastapi==0.118.0
-uvicorn[standard]==0.40.0
+fastapi==0.136.1
+uvicorn[standard]==0.47.0
 python-multipart>=0.0.27
 starlette>=0.49.1
 
 # --- Validation ---
-pydantic==2.10.4
-pydantic-settings==2.6.1
+pydantic==2.13.4
+pydantic-settings==2.14.1
 email-validator==2.3.0
 
 # --- Database ---
 # psycopg2-binary: PostgreSQL driver (used in production via DATABASE_URL)
 # SQLite is stdlib (used for local dev when DATABASE_URL is not set)
-psycopg2-binary==2.9.11
+psycopg2-binary==2.9.12
 
 # --- Auth ---
-bcrypt==4.2.1
+bcrypt==4.3.0
 # python-jose: used by src/api/auth_utils.py (`from jose import JWTError, jwt`).
 # PyJWT is NOT imported anywhere — leaving it out. If the code is migrated
 # to `import jwt` in the future, re-add PyJWT and drop python-jose.
@@ -32,27 +32,27 @@ requests>=2.33.0
 httpx==0.28.1
 
 # --- LLM (Groq Cloud) ---
-groq==1.0.0
+groq==1.2.0
 
 # --- Document processing ---
-PyMuPDF==1.26.7
+PyMuPDF==1.27.2.3
 python-docx==1.2.0
 
 # --- RAG / Embeddings ---
-sentence-transformers==5.2.0
+sentence-transformers==5.5.0
 faiss-cpu==1.13.2
-numpy==2.2.0
-cachetools==5.5.0
+numpy==2.4.5
+cachetools==5.5.2
 
 # --- Voice (Sarvam cloud API — no local model needed) ---
 aiofiles==25.1.0
 soundfile==0.13.1
 
 # --- Scheduling (SLA scheduler) ---
-apscheduler==3.10.4
+apscheduler==3.11.2
 
 # --- Observability ---
-sentry-sdk[fastapi]==2.18.0
+sentry-sdk[fastapi]==2.60.0
 
 # --- Utilities ---
 python-dotenv==1.2.2
