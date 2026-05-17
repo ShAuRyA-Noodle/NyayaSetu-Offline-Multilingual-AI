@@ -16,7 +16,7 @@
     "@react-three/drei": "^9.122.0",
     "@react-three/fiber": "^8.18.0",
     "@studio-freight/react-lenis": "^0.0.47",
-    "axios": "^1.6.2",
+    "axios": "^1.15.1",
     "date-fns": "^2.30.0",
     "framer-motion": "^12.36.0",
     "gsap": "^3.14.2",
@@ -27,7 +27,7 @@
     "react-dom": "^18.2.0",
     "react-hot-toast": "^2.6.0",
     "react-i18next": "^16.5.8",
-    "react-router-dom": "^6.20.0",
+    "react-router-dom": "^6.30.2",
     "recharts": "^2.10.3",
     "three": "^0.160.1"
   },
@@ -38,11 +38,20 @@
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.16",
     "concurrently": "^8.2.2",
-    "electron": "^28.3.3",
-    "postcss": "^8.4.32",
+    "electron": "^39.8.5",
+    "postcss": "^8.5.10",
     "tailwindcss": "^3.3.6",
     "typescript": "^5.3.3",
-    "vite": "^5.0.7",
+    "vite": "^6.4.2",
     "wait-on": "^7.2.0"
+  },
+  "overrides": {
+    "@remix-run/router": "^1.23.2",
+    "follow-redirects": "^1.16.0",
+    "lodash": "^4.18.0",
+    "picomatch": "^4.0.4",
+    "esbuild": "^0.25.0",
+    "rollup": "^4.59.0",
+    "postcss": "$postcss"
   }
 }
