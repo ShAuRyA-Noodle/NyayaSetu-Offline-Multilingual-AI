@@ -29,13 +29,13 @@
 
 India has 1.4 billion citizens, 22 official languages, and hundreds of dialects. Government services remain inaccessible to the people who need them most:
 
-- **Language barriers** — portals are English-first; a Tamil farmer can't navigate a Hindi scheme website
-- **Digital divide** — 65%+ rural population can't use complex government interfaces; many are illiterate
-- **Grievance black holes** — citizens file complaints with zero visibility into routing, status, or accountability
-- **Officer overload** — thousands of complaints manually read, classified, and routed by hand
-- **Notice opacity** — gazette notifications in dense legal language are unreadable by common citizens
-- **No voice pathway** — illiterate, elderly, and disabled citizens have no digital entry point
-- **Connectivity gaps** — internet is unreliable in rural India; cloud-dependent solutions fail where needed most
+- **Language barriers** - portals are English-first; a Tamil farmer can't navigate a Hindi scheme website
+- **Digital divide** - 65%+ rural population can't use complex government interfaces; many are illiterate
+- **Grievance black holes** - citizens file complaints with zero visibility into routing, status, or accountability
+- **Officer overload** - thousands of complaints manually read, classified, and routed by hand
+- **Notice opacity** - gazette notifications in dense legal language are unreadable by common citizens
+- **No voice pathway** - illiterate, elderly, and disabled citizens have no digital entry point
+- **Connectivity gaps** - internet is unreliable in rural India; cloud-dependent solutions fail where needed most
 
 ---
 
@@ -75,7 +75,7 @@ NyayaSetu is an offline-capable, voice-native, multilingual AI platform that con
 │  ┌──────────────────────▼───────────────────────────────┐    │
 │  │  NYAYAVAANI VOICE ENGINE                             │    │
 │  │  ASR (Sarvam/Whisper) → Intent → TTS (Bulbul/pyttsx3)│    │
-│  │  Translation (Mayura/Ollama) — 12 languages          │    │
+│  │  Translation (Mayura/Ollama) - 12 languages          │    │
 │  └──────────────────────────────────────────────────────┘    │
 └──────────────────────┬───────────────────────────────────────┘
                        │
@@ -124,7 +124,7 @@ NyayaSetu is an offline-capable, voice-native, multilingual AI platform that con
 
 ## Core Modules
 
-### 1. RAG Engine — The Intelligence Core
+### 1. RAG Engine - The Intelligence Core
 
 A complete Retrieval-Augmented Generation pipeline that answers citizen queries grounded in real government scheme data.
 
@@ -138,24 +138,24 @@ Query (any language)
   → Return answer + citations + confidence
 ```
 
-**Chunking:** Each government scheme is split into 3 semantic chunks — eligibility, benefits, and application process — aligned to how citizens actually ask questions.
+**Chunking:** Each government scheme is split into 3 semantic chunks - eligibility, benefits, and application process - aligned to how citizens actually ask questions.
 
 **Anti-hallucination system (6 layers):**
 
 | Layer | Mechanism |
 |-------|-----------|
-| Prompt grounding | "ANSWER ONLY FROM PROVIDED CONTEXT — DO NOT use general knowledge" |
+| Prompt grounding | "ANSWER ONLY FROM PROVIDED CONTEXT - DO NOT use general knowledge" |
 | Explicit refusal | "If missing, say 'I don't have sufficient information'" |
 | Length validation | Rejects too-short or too-long responses |
 | Source validation | Verifies cited scheme names exist in the provided context |
 | Number detection | Flags fabricated statistics not present in any context chunk |
 | JSON repair | Bracket balancing and truncation recovery for structured output |
 
-Minimum confidence threshold: **0.3** — below this, chunks are excluded entirely.
+Minimum confidence threshold: **0.3** - below this, chunks are excluded entirely.
 
 ---
 
-### 2. NyayaVaani — Voice Interface
+### 2. NyayaVaani - Voice Interface
 
 Voice-native cross-lingual system enabling citizens who can't read or type to interact with government services by speaking.
 
@@ -177,9 +177,9 @@ Voice-native cross-lingual system enabling citizens who can't read or type to in
 | Speech-to-Text | saarika v2.5 (25MB / 300s max) | faster-whisper (base, int8, beam=5) |
 | Text-to-Speech | bulbul v3 (22050Hz, priya/shubh) | pyttsx3 (rate=150, vol=0.9) |
 | Translation | mayura v1 (formal/colloquial) | Ollama sarvam-m-tools (temp=0.2) |
-| Intent | — | Ollama sarvam-m-tools (7 intents, 8 categories) |
+| Intent | - | Ollama sarvam-m-tools (7 intents, 8 categories) |
 
-Online mode auto-detected via API key prefix. Degrades gracefully — never crashes.
+Online mode auto-detected via API key prefix. Degrades gracefully - never crashes.
 
 **Voice grievance end-to-end flow (single API call):**
 
@@ -198,7 +198,7 @@ Online mode auto-detected via API key prefix. Degrades gracefully — never cras
 
 ---
 
-### 3. Grievance Router — AI-Powered Classification
+### 3. Grievance Router - AI-Powered Classification
 
 Routes citizen complaints to the correct department with priority assignment and SLA enforcement.
 
@@ -222,7 +222,7 @@ Submit → Pending → Accepted/Rejected → In Progress → Under Review → Re
 
 **SLA states:** on_track (>25% remaining) → warning (<25%) → breached (overdue) → paused/resolved
 
-Pause/resume support — when waiting for citizen documents, the SLA clock pauses and the deadline extends automatically.
+Pause/resume support - when waiting for citizen documents, the SLA clock pauses and the deadline extends automatically.
 
 **Resolution estimates:** 7 days (info requests) → 14 days (eligibility) → 30 days (rejections) → 45 days (payment delays) → 60 days (corruption)
 
@@ -253,7 +253,7 @@ Officer provides topic and context → RAG retrieves scheme data → Qwen genera
 | Tokens | JWT HS256, 24h expiry, hourly refresh on frontend |
 | Passwords | bcrypt, min 8 chars (upper + lower + digit), cannot reuse last 5 |
 | Lockout | 5 failed attempts → 15-minute lock |
-| Sessions | DB-stored — forced logout, device tracking (mobile/desktop/web), IP logging |
+| Sessions | DB-stored - forced logout, device tracking (mobile/desktop/web), IP logging |
 | Roles | citizen (1) → officer (2) → admin (3) hierarchy |
 | Officer Signup | Admin-generated 8-char codes, 30-day expiry |
 | Inactivity | 30-minute auto-logout (mouse/key/scroll/touch monitoring) |
@@ -280,9 +280,9 @@ SQLite with WAL journal mode and enforced foreign keys. 20+ tables across a core
 
 ---
 
-## Frontend — 10 Pages
+## Frontend - 10 Pages
 
-Every page is **role-adaptive** — the same route renders different UI for citizen, officer, and admin.
+Every page is **role-adaptive** - the same route renders different UI for citizen, officer, and admin.
 
 | Page | Route | Access | What It Does |
 |------|-------|--------|-------------|
@@ -297,22 +297,22 @@ Every page is **role-adaptive** — the same route renders different UI for citi
 | Admin | `/admin` | Admin | 7-tab dashboard: Overview, Grievances, Users, Officer Codes, Audit, SLA, System |
 | Settings | `/settings` | All | Theme toggle, language, notifications, password change, sessions |
 
-### Design System — Indian Earth Tones
+### Design System - Indian Earth Tones
 
-A custom Tailwind palette rooted in Indian cultural identity. This is not a Material/Bootstrap skin — every visual choice is intentional.
+A custom Tailwind palette rooted in Indian cultural identity. This is not a Material/Bootstrap skin - every visual choice is intentional.
 
 | Name | Meaning | Role |
 |------|---------|------|
-| **mitti** | Clay / Earth | Primary brand — warm browns |
-| **haldi** | Turmeric / Gold | Accent — warm yellows |
-| **neel** | Indigo / Navy | Secondary — deep blues |
-| **kora** | Unbleached cloth | Background — natural cream |
-| **sukhiGhaas** | Dried grass | Surface — muted greens |
+| **mitti** | Clay / Earth | Primary brand - warm browns |
+| **haldi** | Turmeric / Gold | Accent - warm yellows |
+| **neel** | Indigo / Navy | Secondary - deep blues |
+| **kora** | Unbleached cloth | Background - natural cream |
+| **sukhiGhaas** | Dried grass | Surface - muted greens |
 | **saffron** | India flag orange | `#FF9933` |
 | **india-green** | India flag green | `#138808` |
 | **terracotta** | Baked earth | Deep orange accent |
 
-**Dark mode:** bg `#0F0D0A`, surface `#1A1714`, card `#231F1A` — warm dark tones, not cold blacks.
+**Dark mode:** bg `#0F0D0A`, surface `#1A1714`, card `#231F1A` - warm dark tones, not cold blacks.
 
 **Typography:** Noto Sans + Noto Sans Devanagari (body), Playfair Display (headings), Yatra One (Devanagari accent).
 
@@ -328,15 +328,15 @@ The entire AI core runs on-device. No data leaves the machine. No cloud costs. N
 
 | Component | Local | Cloud Enhancement |
 |-----------|-------|-------------------|
-| LLM (Qwen 2.5 14B via Ollama) | Always | — |
-| Embeddings (768-dim multilingual) | Always | — |
-| Vector Search (FAISS) | Always | — |
-| Database (SQLite) | Always | — |
+| LLM (Qwen 2.5 14B via Ollama) | Always | - |
+| Embeddings (768-dim multilingual) | Always | - |
+| Vector Search (FAISS) | Always | - |
+| Database (SQLite) | Always | - |
 | Speech-to-Text | faster-whisper | Sarvam saarika v2.5 |
 | Text-to-Speech | pyttsx3 | Sarvam bulbul v3 |
 | Translation | Ollama sarvam-m-tools | Sarvam mayura v1 |
 
-Online mode auto-detected. System degrades gracefully — lower quality voice, same core functionality.
+Online mode auto-detected. System degrades gracefully - lower quality voice, same core functionality.
 
 ---
 
@@ -522,14 +522,14 @@ NyayaSetu/
 
 NyayaSetu deploys to a **$0/month** stack:
 
-- **Backend** — Hugging Face Spaces (Docker SDK, 16 GB RAM, persistent FS).
-- **Frontend** — Vercel (Hobby tier, edge-cached SPA).
-- **Database** — Neon Postgres (0.5 GB, 24 h point-in-time recovery).
-- **LLM** — Groq Cloud free tier (~14 400 req/day).
-- **Voice** — Web Speech API in-browser for live ASR/TTS; Sarvam Bulbul
+- **Backend** - Hugging Face Spaces (Docker SDK, 16 GB RAM, persistent FS).
+- **Frontend** - Vercel (Hobby tier, edge-cached SPA).
+- **Database** - Neon Postgres (0.5 GB, 24 h point-in-time recovery).
+- **LLM** - Groq Cloud free tier (~14 400 req/day).
+- **Voice** - Web Speech API in-browser for live ASR/TTS; Sarvam Bulbul
   server-side for cached notice narration.
-- **Edge / WAF** — Cloudflare proxied DNS + Turnstile.
-- **Uptime** — UptimeRobot. **Errors** — Sentry (free tier).
+- **Edge / WAF** - Cloudflare proxied DNS + Turnstile.
+- **Uptime** - UptimeRobot. **Errors** - Sentry (free tier).
 
 Step-by-step instructions live in **[DEPLOYMENT.md](DEPLOYMENT.md)**.
 The architecture diagram and rationale are in
@@ -541,10 +541,10 @@ The architecture diagram and rationale are in
 
 ## Project meta
 
-- **License** — [Apache 2.0](LICENSE).
-- **Security** — please report vulnerabilities privately, see [SECURITY.md](SECURITY.md).
-- **Contributing** — branch / commit conventions and PR process in [CONTRIBUTING.md](CONTRIBUTING.md).
-- **Changelog** — release history in [CHANGELOG.md](CHANGELOG.md).
+- **License** - [Apache 2.0](LICENSE).
+- **Security** - please report vulnerabilities privately, see [SECURITY.md](SECURITY.md).
+- **Contributing** - branch / commit conventions and PR process in [CONTRIBUTING.md](CONTRIBUTING.md).
+- **Changelog** - release history in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
