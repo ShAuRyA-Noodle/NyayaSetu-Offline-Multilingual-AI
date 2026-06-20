@@ -126,6 +126,11 @@ async def ask_question(
         rag_engine = get_rag_engine()
         generator = get_answer_generator()
 
+        # Neutralise prompt-injection markers in citizen-controlled input before
+        # it reaches the LLM prompt, consistent with every other generation path.
+        from ..generation.prompt_templates import sanitize_user_input
+        safe_question = sanitize_user_input(request.question, max_len=2000)
+
         # Try RAG retrieval; fall back to direct LLM if embeddings unavailable
         results = []
         try:
@@ -156,13 +161,13 @@ async def ask_question(
         if context:
             prompt = (
                 f"Answer based on context:\n\nContext:\n{context}\n\n"
-                f"Question: {request.question}\n\n"
+                f"Question: {safe_question}\n\n"
                 f"Provide detailed answer in {lang_instruction}."
             )
         else:
             prompt = (
                 f"You are NyayaSetu, an expert on Indian government schemes like PM-KISAN, MGNREGA, PMAY-G.\n\n"
-                f"Question: {request.question}\n\n"
+                f"Question: {safe_question}\n\n"
                 f"Provide a helpful, detailed answer in {lang_instruction}."
             )
 
