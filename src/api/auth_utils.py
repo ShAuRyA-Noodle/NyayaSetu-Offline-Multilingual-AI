@@ -111,12 +111,23 @@ def create_refresh_token(data: dict) -> str:
     return create_access_token(data, token_type="refresh")
 
 
-def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
-    """Decode and validate JWT token."""
+def decode_access_token(
+    token: str, expected_type: str = "access"
+) -> Optional[Dict[str, Any]]:
+    """Decode and validate a JWT, enforcing the expected token type.
+
+    Tokens minted with type="refresh" are longer-lived than access tokens, so
+    they must not be accepted on access-protected routes. When ``expected_type``
+    is None the type claim is not checked (used by flows that knowingly accept
+    refresh tokens).
+    """
     try:
-        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:
         return None
+    if expected_type is not None and payload.get("type", "access") != expected_type:
+        return None
+    return payload
 
 
 # ============================================================================

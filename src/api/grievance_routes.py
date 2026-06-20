@@ -580,8 +580,8 @@ async def department_dashboard(
 # ============================================================================
 
 @router.get("/stats")
-async def grievance_stats():
-    """Get grievance statistics."""
+async def grievance_stats(current_user: dict = Depends(require_role("officer"))):
+    """Get grievance statistics. Staff only (system-wide operational metrics)."""
     try:
         with get_db() as conn:
             cursor = conn.cursor()
@@ -618,21 +618,21 @@ async def grievance_stats():
 
 
 @router.get("/sla/dashboard")
-async def sla_dashboard():
-    """System-wide SLA overview."""
+async def sla_dashboard(current_user: dict = Depends(require_role("officer"))):
+    """System-wide SLA overview. Staff only."""
     return sla_service.get_sla_dashboard()
 
 
 @router.get("/sla/breaches")
-async def sla_breaches():
-    """Current active SLA breaches."""
+async def sla_breaches(current_user: dict = Depends(require_role("officer"))):
+    """Current active SLA breaches. Staff only."""
     dashboard = sla_service.get_sla_dashboard()
     return {"breaches": dashboard.get("active_breaches", [])}
 
 
 @router.get("/analytics")
-async def grievance_analytics():
-    """Grievance analytics."""
+async def grievance_analytics(current_user: dict = Depends(require_role("officer"))):
+    """Grievance analytics. Staff only (exposes officer names and metrics)."""
     try:
         with get_db() as conn:
             cursor = conn.cursor()
