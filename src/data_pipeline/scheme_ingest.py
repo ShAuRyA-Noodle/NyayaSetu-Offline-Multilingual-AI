@@ -247,7 +247,9 @@ def scrape_and_ingest(
             stats.skipped_empty += 1
             continue
         batch.append(ns)
-        if len(batch) >= 25:
+        if progress:
+            print(f"[ok] {count} {slug[:40]}", flush=True)
+        if len(batch) >= 10:
             _merge_stats(stats, ingest_schemes(batch, db_path))
             msg = (f"[progress] scanned={scanned} new={count} "
                    f"inserted={stats.inserted} updated={stats.updated} "
