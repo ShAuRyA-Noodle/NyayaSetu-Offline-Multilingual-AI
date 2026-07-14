@@ -51,7 +51,20 @@ class LanguageRegistry:
 
     @staticmethod
     def detect_language(text: str) -> str:
-        """Detect language of text, return short code."""
+        """Detect language of text, return short code.
+
+        Uses the offline fastText lid.176 detector (src.nlp) when available,
+        falling back to langdetect + Devanagari-script heuristics otherwise.
+        """
+        try:
+            from src.nlp.language_detection import detect_language as _ft_detect
+
+            code = _ft_detect(text)
+            if code in SUPPORTED_LANGUAGES:
+                return code
+        except Exception:
+            pass  # fall through to legacy langdetect path
+
         try:
             from langdetect import detect
             detected = detect(text)
