@@ -160,3 +160,10 @@ mobile/.flutter-plugins-dependencies
 # =========================
 .github/workflows/*.log
 _dump/
+
+# ML venv, model + dataset caches, DB backups
+.venv-ml/
+data/tatoeba_cache/
+data/flores_cache/
+data/governance.db.bak-*
+data/operation_queue.db

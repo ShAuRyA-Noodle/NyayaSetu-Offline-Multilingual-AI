@@ -1,0 +1,123 @@
+{
+  "model": "fastText lid.176",
+  "dataset": "Tatoeba (per-language sentences)",
+  "languages": [
+    "hi",
+    "bn",
+    "ta",
+    "te",
+    "mr",
+    "gu",
+    "kn",
+    "ml",
+    "pa",
+    "or",
+    "as",
+    "en"
+  ],
+  "total_samples": 2368,
+  "overall_accuracy": 0.9688,
+  "per_language": {
+    "hi": {
+      "n": 200,
+      "correct": 199,
+      "accuracy": 0.995
+    },
+    "bn": {
+      "n": 200,
+      "correct": 199,
+      "accuracy": 0.995
+    },
+    "ta": {
+      "n": 200,
+      "correct": 200,
+      "accuracy": 1.0
+    },
+    "te": {
+      "n": 200,
+      "correct": 200,
+      "accuracy": 1.0
+    },
+    "mr": {
+      "n": 200,
+      "correct": 200,
+      "accuracy": 1.0
+    },
+    "gu": {
+      "n": 168,
+      "correct": 168,
+      "accuracy": 1.0
+    },
+    "kn": {
+      "n": 200,
+      "correct": 200,
+      "accuracy": 1.0
+    },
+    "ml": {
+      "n": 200,
+      "correct": 200,
+      "accuracy": 1.0
+    },
+    "pa": {
+      "n": 200,
+      "correct": 200,
+      "accuracy": 1.0
+    },
+    "or": {
+      "n": 200,
+      "correct": 200,
+      "accuracy": 1.0
+    },
+    "as": {
+      "n": 200,
+      "correct": 128,
+      "accuracy": 0.64
+    },
+    "en": {
+      "n": 200,
+      "correct": 200,
+      "accuracy": 1.0
+    }
+  },
+  "confusion": {
+    "hi": {
+      "hi": 199,
+      "mr": 1
+    },
+    "bn": {
+      "bn": 199,
+      "as": 1
+    },
+    "ta": {
+      "ta": 200
+    },
+    "te": {
+      "te": 200
+    },
+    "mr": {
+      "mr": 200
+    },
+    "gu": {
+      "gu": 168
+    },
+    "kn": {
+      "kn": 200
+    },
+    "ml": {
+      "ml": 200
+    },
+    "pa": {
+      "pa": 200
+    },
+    "or": {
+      "or": 200
+    },
+    "as": {
+      "as": 128,
+      "bn": 72
+    },
+    "en": {
+      "en": 200
+    }
+  }
+}
