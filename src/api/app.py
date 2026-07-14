@@ -85,6 +85,13 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             logger.warning(f"SLA scheduler failed to start: {exc}")
 
+        # Start daily scheme-refresh scheduler (re-scrapes myScheme.gov.in + rebuilds FAISS)
+        try:
+            from src.data_pipeline.refresh_scheduler import start_scheme_refresh_scheduler
+            start_scheme_refresh_scheduler()
+        except Exception as exc:
+            logger.warning(f"Scheme refresh scheduler failed to start: {exc}")
+
         app.state.startup_time = time.time()
         app.state.request_count = 0
         app.state.requests_by_endpoint = {}
@@ -102,6 +109,11 @@ async def lifespan(app: FastAPI):
         stop_sla_scheduler()
     except Exception as exc:
         logger.warning(f"SLA scheduler failed to stop cleanly: {exc}")
+    try:
+        from src.data_pipeline.refresh_scheduler import stop_scheme_refresh_scheduler
+        stop_scheme_refresh_scheduler()
+    except Exception as exc:
+        logger.warning(f"Scheme refresh scheduler failed to stop cleanly: {exc}")
     await shutdown_services()
     logger.info("All services shut down successfully")
 
