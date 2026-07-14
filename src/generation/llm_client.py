@@ -238,7 +238,34 @@ class OllamaClient:
 
         if self._use_groq:
             return self._generate_groq(prompt, system_prompt, temperature, max_tokens)
+        # Offline-first: prefer the bundled on-device llama.cpp model when it is
+        # present (fully offline, no daemon). Falls back to Ollama otherwise.
+        local = self._maybe_local_generate(prompt, system_prompt, temperature, max_tokens)
+        if local is not None:
+            return local
         return self._generate_ollama(prompt, system_prompt, temperature, max_tokens)
+
+    # ---- Local on-device (llama.cpp offline lane) -------------------------
+
+    def _maybe_local_generate(
+        self, prompt: str, system_prompt: Optional[str],
+        temperature: Optional[float], max_tokens: Optional[int],
+    ) -> Optional[Dict[str, Any]]:
+        """Use the bundled GGUF model if available; return None to fall back."""
+        if os.getenv("DISABLE_LOCAL_LLM") == "1":
+            return None
+        try:
+            if getattr(self, "_local_llm", None) is None:
+                from .local_llm import get_local_llm
+                self._local_llm = get_local_llm()
+            if not self._local_llm.is_available():
+                return None
+            return self._local_llm.generate(
+                prompt, system_prompt, temperature, max_tokens
+            )
+        except Exception as e:  # noqa: BLE001 — never break the cloud/Ollama path
+            logger.debug("Local LLM path unavailable: %s", e)
+            return None
 
     # ---- Groq (OpenAI-compatible) -----------------------------------
 
