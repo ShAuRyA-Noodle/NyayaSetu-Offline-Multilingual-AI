@@ -1,0 +1,7 @@
+{
+  "dataset": "scheme_queries.jsonl (grounded in real schemes)",
+  "n_queries": 39,
+  "n_indexed_chunks": 13,
+  "recall_at_1": 0.9487,
+  "recall_at_3": 1.0
+}
