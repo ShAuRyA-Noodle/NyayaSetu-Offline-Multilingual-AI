@@ -22,5 +22,15 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Register the offline service worker (skipped in Electron file:// context).
+      if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/sw.js').catch(function (e) {
+            console.warn('SW registration failed:', e);
+          });
+        });
+      }
+    </script>
   </body>
 </html>

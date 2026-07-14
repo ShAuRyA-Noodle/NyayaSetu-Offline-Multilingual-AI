@@ -30,6 +30,5 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ],
-  "_TODO": "Generate /public/icon-192.png and /public/icon-512.png from favicon.svg. Recommended: use 'pwa-asset-generator' or 'real-favicon-generator' to produce maskable icons that respect the safe zone (10% padding). The references above are kept so the manifest is valid as soon as the PNGs land in /public."
+  ]
 }
