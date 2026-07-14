@@ -183,32 +183,56 @@ def ingest_schemes(
     return stats
 
 
+def _existing_slugs(db_path: str) -> set[str]:
+    """Return slugs already ingested (for resume / incremental skip)."""
+    conn = sqlite3.connect(db_path)
+    try:
+        ensure_schema(conn)
+        rows = conn.execute(
+            "SELECT slug FROM schemes WHERE slug IS NOT NULL"
+        ).fetchall()
+        return {r[0] for r in rows}
+    finally:
+        conn.close()
+
+
 def scrape_and_ingest(
     db_path: str = DEFAULT_DB,
     limit: Optional[int] = None,
     keyword: str = "",
     page_size: int = 100,
     client: Optional[MySchemeClient] = None,
+    resume: bool = True,
+    progress: bool = False,
 ) -> IngestStats:
     """
     End-to-end: page through myScheme, fetch+normalize each scheme, upsert.
 
     Args:
         db_path: SQLite governance DB path.
-        limit: Cap the number of schemes (None = all ~4,300+).
+        limit: Cap the number of NEW schemes ingested this run (None = all).
         keyword: Optional search filter.
         page_size: List pagination size.
         client: Injectable client (for testing).
+        resume: Skip slugs already present in the DB (makes the scrape
+            restartable and the daily cron incremental for new schemes).
+        progress: Print flushed per-batch progress (for monitored background runs).
     """
     client = client or MySchemeClient()
     stats = IngestStats()
-    conn = sqlite3.connect(db_path)
-    ensure_schema(conn)
-    conn.close()
 
-    count = 0
+    seen = _existing_slugs(db_path) if resume else set()
+    if seen and progress:
+        print(f"[resume] {len(seen)} schemes already in DB; skipping those",
+              flush=True)
+
+    count = 0          # new schemes attempted this run
+    scanned = 0        # slugs scanned (incl. skipped)
     batch: list[NormalizedScheme] = []
     for slug in client.iter_slugs(keyword=keyword, page_size=page_size):
+        scanned += 1
+        if slug in seen:
+            continue
         if limit is not None and count >= limit:
             break
         count += 1
@@ -223,12 +247,14 @@ def scrape_and_ingest(
             stats.skipped_empty += 1
             continue
         batch.append(ns)
-        if len(batch) >= 50:
+        if len(batch) >= 25:
             _merge_stats(stats, ingest_schemes(batch, db_path))
-            logger.info(
-                "Progress: fetched=%d inserted=%d updated=%d",
-                count, stats.inserted, stats.updated,
-            )
+            msg = (f"[progress] scanned={scanned} new={count} "
+                   f"inserted={stats.inserted} updated={stats.updated} "
+                   f"errors={stats.errors}")
+            logger.info(msg)
+            if progress:
+                print(msg, flush=True)
             batch = []
     if batch:
         _merge_stats(stats, ingest_schemes(batch, db_path))

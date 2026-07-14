@@ -48,6 +48,8 @@ def main() -> int:
     p.add_argument("--page-size", type=int, default=100, help="List pagination size")
     p.add_argument("--rebuild-index", action="store_true", help="Rebuild FAISS after")
     p.add_argument("--quiet", action="store_true", help="Less logging (cron)")
+    p.add_argument("--no-resume", action="store_true", help="Re-fetch all (no skip)")
+    p.add_argument("--delay", type=float, default=0.5, help="Politeness delay (s)")
     args = p.parse_args()
 
     logging.basicConfig(
@@ -55,13 +57,20 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
+    from src.data_pipeline.myscheme_client import MySchemeClient
+
     start = time.time()
-    print(f"Scraping myScheme.gov.in → {args.db} (limit={args.limit or 'ALL'})")
+    print(f"Scraping myScheme.gov.in -> {args.db} (limit={args.limit or 'ALL'})",
+          flush=True)
+    client = MySchemeClient(request_delay=args.delay, max_retries=4)
     stats = scrape_and_ingest(
         db_path=args.db,
         limit=args.limit,
         keyword=args.keyword,
         page_size=args.page_size,
+        client=client,
+        resume=not args.no_resume,
+        progress=True,
     )
     dur = time.time() - start
     print(
