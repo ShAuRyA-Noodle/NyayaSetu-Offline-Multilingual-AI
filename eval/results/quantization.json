@@ -1,0 +1,9 @@
+{
+  "method": "PyTorch dynamic INT8 quantization (Linear layers)",
+  "fp32_param_mb": 541.3,
+  "int8_serialized_mb": 412.2,
+  "size_reduction_pct": 23.9,
+  "fp32_latency_ms": 8.44,
+  "int8_latency_ms": 9.27,
+  "speedup_x": 0.91
+}

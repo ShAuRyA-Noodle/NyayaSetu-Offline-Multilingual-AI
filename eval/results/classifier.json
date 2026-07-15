@@ -1,0 +1,11 @@
+{
+  "model": "distilbert-base-multilingual-cased",
+  "dataset": "myScheme scheme->category (real labels)",
+  "n_total": 3516,
+  "n_test": 704,
+  "n_classes": 15,
+  "epochs": 3,
+  "accuracy": 0.7315,
+  "macro_f1": 0.4654,
+  "weighted_f1": 0.7179
+}
