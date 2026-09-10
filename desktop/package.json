@@ -54,6 +54,6 @@
     "rollup": "^4.59.0",
     "postcss": "$postcss",
     "shell-quote": "^1.8.4",
-    "joi": "^17.13.4"
+    "joi": "^17.13.7"
   }
 }
