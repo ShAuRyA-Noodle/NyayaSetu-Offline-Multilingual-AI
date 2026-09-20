@@ -165,5 +165,6 @@ _dump/
 .venv-ml/
 data/tatoeba_cache/
 data/flores_cache/
+data/iitb_cache/
 data/governance.db.bak-*
 data/operation_queue.db
