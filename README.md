@@ -495,7 +495,7 @@ NyayaSetu/
 │   │   ├── services/api.ts           # Axios client (60+ typed methods)
 │   │   └── i18n/                     # English + Hindi translation files
 │   ├── tailwind.config.js            # Indian earth-tone design system
-│   └── vite.config.ts
+│   └── vite.config.mts
 │
 ├── data/
 │   ├── governance.db                  # SQLite database
