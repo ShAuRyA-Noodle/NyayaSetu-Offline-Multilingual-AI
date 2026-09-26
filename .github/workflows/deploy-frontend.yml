@@ -14,12 +14,9 @@ name: Deploy frontend (Vercel webhook)
 # The hook URL itself contains the project + branch token, so no further
 # auth is required.
 
+# No Vercel project or deploy-hook secret is configured. Keep this manual-only
+# until both exist; then restore the push trigger after verifying a deployment.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "desktop/**"
-      - ".github/workflows/deploy-frontend.yml"
   workflow_dispatch:
 
 concurrency:
@@ -36,8 +33,8 @@ jobs:
           HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
         run: |
           if [ -z "${HOOK_URL}" ]; then
-            echo "VERCEL_DEPLOY_HOOK_URL is not set; skipping."
-            exit 0
+            echo "::error::VERCEL_DEPLOY_HOOK_URL is not configured; no deployment was triggered."
+            exit 1
           fi
           # POST with no body — Vercel's deploy hook just needs to be hit.
           # `--fail` so a non-2xx response fails the job.
