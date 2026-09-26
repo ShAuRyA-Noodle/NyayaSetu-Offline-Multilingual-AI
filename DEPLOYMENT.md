@@ -214,6 +214,13 @@ You should get a 200.
 The build takes ~30–60 s. Note your Vercel URL, e.g.
 `https://nyayasetu.vercel.app`.
 
+The GitHub `Deploy frontend (Vercel webhook)` workflow is manual-only until a
+Vercel project exists. After the first successful deployment, create a deploy
+hook for the production branch in Vercel and save its URL as the GitHub Actions
+secret `VERCEL_DEPLOY_HOOK_URL`. Run the workflow manually and verify the new
+deployment in Vercel before restoring its push trigger. A manual run fails
+clearly while the secret is absent.
+
 ---
 
 ## Phase 4 — CORS handshake (2 min)

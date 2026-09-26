@@ -5,7 +5,7 @@
   "framework": "vite",
   "buildCommand": "npm run build:web",
   "outputDirectory": "dist",
-  "installCommand": "npm install --legacy-peer-deps",
+  "installCommand": "npm ci --legacy-peer-deps",
   "devCommand": "npm run dev:vite",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
