@@ -82,7 +82,7 @@ jobs:
   # Frontend: type-check and Vite build the SPA bundle that Vercel ships.
   # ---------------------------------------------------------------------------
   frontend:
-    name: frontend (node 20)
+    name: frontend (node 24)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -94,17 +94,23 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: desktop/package-lock.json
 
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
+      - name: Typecheck
+        run: npx tsc --noEmit
+
       - name: Build (web)
         run: npm run build:web
         env:
           VITE_API_URL: https://example.invalid
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=low
 
   # ---------------------------------------------------------------------------
   # Docker: ensure the multi-stage Dockerfile builds cleanly. We do not push.
