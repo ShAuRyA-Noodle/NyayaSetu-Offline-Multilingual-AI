@@ -360,8 +360,8 @@ Online mode auto-detected. System degrades gracefully - lower quality voice, sam
 
 ### Prerequisites
 
-- Python 3.10+
-- Node.js 18+
+- Python 3.11 (the version CI and the Dockerfile use)
+- Node.js 24 (see `engines` in `desktop/package.json`)
 - [Ollama](https://ollama.com) installed and running
 - 16GB RAM recommended
 
