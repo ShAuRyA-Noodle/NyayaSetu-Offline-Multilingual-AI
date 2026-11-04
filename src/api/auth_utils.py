@@ -20,7 +20,8 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 
 import bcrypt
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError as JWTError
 
 from .database import get_db
 
