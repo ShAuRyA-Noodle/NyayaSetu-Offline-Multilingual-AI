@@ -411,8 +411,10 @@ def _ensure_columns_exist(conn):
             changed_by INTEGER,
             changed_by_name TEXT,
             changed_by_role TEXT,
+            change_reason TEXT,
             notes TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            is_auto_change BOOLEAN DEFAULT 0,
+            changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
 

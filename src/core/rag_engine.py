@@ -83,6 +83,7 @@ class RAGEngine:
         # Initialize components
         logger.info("Initializing RAG Engine...")
         
+        self._ensure_schemes_seeded()
         self.chunker = SchemeChunker(str(self.db_path))
         self.embedder = MultilingualEmbedder(cache_dir=str(self.model_cache_dir))
         self.retriever = FAISSRetriever(embedding_dim=self.embedder.get_embedding_dim())
@@ -92,6 +93,58 @@ class RAGEngine:
         
         logger.info("RAG Engine initialized successfully")
     
+    def _ensure_schemes_seeded(self) -> None:
+        """
+        Make sure the local schemes table exists and is not empty.
+
+        On a fresh clone there is no data/governance.db yet, so the chunker
+        has nothing to read. Create the table and load data/schemes_seed.json
+        when the table is empty. Existing rows are never touched.
+        """
+        import json
+        import sqlite3
+
+        seed_path = Path(__file__).resolve().parents[2] / "data" / "schemes_seed.json"
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS schemes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    scheme_name TEXT,
+                    department TEXT,
+                    eligibility TEXT,
+                    benefits TEXT,
+                    process TEXT
+                )
+                """
+            )
+            count = conn.execute("SELECT COUNT(*) FROM schemes").fetchone()[0]
+            if count == 0 and seed_path.exists():
+                with open(seed_path, encoding="utf-8") as f:
+                    seed = json.load(f)
+                conn.executemany(
+                    """
+                    INSERT INTO schemes (scheme_name, department, eligibility, benefits, process)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    [
+                        (
+                            row.get("scheme_name"),
+                            row.get("department"),
+                            row.get("eligibility"),
+                            row.get("benefits"),
+                            row.get("process"),
+                        )
+                        for row in seed
+                    ],
+                )
+                logger.info(f"Seeded {len(seed)} schemes from {seed_path.name}")
+            conn.commit()
+        finally:
+            conn.close()
+
     def _initialize_index(self, force_rebuild: bool = False) -> None:
         """
         Build or load FAISS index.

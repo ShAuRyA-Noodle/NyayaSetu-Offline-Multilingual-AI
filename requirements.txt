@@ -5,14 +5,14 @@
 # =========================
 
 # --- Web framework ---
-fastapi>=0.138.0
-uvicorn[standard]==0.52.4
+fastapi>=0.141.1
+uvicorn[standard]==0.54.0
 python-multipart>=0.0.32
 starlette>=0.49.1
 
 # --- Validation ---
-pydantic==2.13.5
-pydantic-settings==2.15.0
+pydantic==2.14.1
+pydantic-settings==2.16.0
 email-validator==2.3.0
 
 # --- Database ---
@@ -22,10 +22,9 @@ psycopg2-binary==2.9.13
 
 # --- Auth ---
 bcrypt==4.3.0
-# python-jose: used by src/api/auth_utils.py (`from jose import JWTError, jwt`).
-# PyJWT is NOT imported anywhere — leaving it out. If the code is migrated
-# to `import jwt` in the future, re-add PyJWT and drop python-jose.
-python-jose[cryptography]==3.5.0
+# PyJWT: used by src/api/auth_utils.py (`import jwt`). Replaced python-jose,
+# which has an unpatched algorithm-confusion advisory (GHSA-3qf3-8w2g-rqmx).
+PyJWT==2.15.1
 
 # --- HTTP clients ---
 requests>=2.33.0
@@ -40,7 +39,7 @@ python-docx==1.2.0
 
 # --- RAG / Embeddings ---
 sentence-transformers==5.7.0
-faiss-cpu==1.15.0
+faiss-cpu==1.15.1
 numpy==2.4.6
 cachetools==5.5.2
 
@@ -52,8 +51,8 @@ soundfile==0.14.0
 apscheduler==3.11.3
 
 # --- Observability ---
-sentry-sdk[fastapi]==2.69.1
+sentry-sdk[fastapi]==2.72.0
 
 # --- Utilities ---
-python-dotenv==1.2.3
+python-dotenv==1.2.4
 langdetect==1.0.9
