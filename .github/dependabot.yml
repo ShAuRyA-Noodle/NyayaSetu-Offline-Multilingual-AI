@@ -12,6 +12,10 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # numpy 2.5+ requires Python 3.12; CI and the Dockerfile run 3.11.
+      # Remove this when the Python version is raised everywhere.
+      - dependency-name: "numpy"
+        versions: [">=2.5.0"]
 
   - package-ecosystem: npm
     directory: /desktop
