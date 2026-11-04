@@ -45,6 +45,19 @@ def upgrade(conn):
             FOREIGN KEY (changed_by) REFERENCES users(id)
         )
     """)
+    # Older local SQLite databases created this table without these columns.
+    # SQLite cannot ADD COLUMN with a non-constant default, so changed_at is
+    # added without one there; new tables get the default from CREATE TABLE.
+    for col_def in [
+        "change_reason TEXT",
+        "is_auto_change BOOLEAN DEFAULT 0",
+        "changed_at TIMESTAMP",
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE grievance_status_history ADD COLUMN {col_def}")
+        except Exception:
+            pass
+
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_status_history_grievance ON grievance_status_history(grievance_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_status_history_changed_at ON grievance_status_history(changed_at DESC)")
 

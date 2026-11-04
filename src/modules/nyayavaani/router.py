@@ -24,6 +24,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/nyayavaani", tags=["NyayaVaani"])
 
+# Upload extensions accepted by /transcribe (browser MediaRecorder + common files).
+_ALLOWED_AUDIO_EXTENSIONS = {"webm", "ogg", "oga", "wav", "mp3", "m4a", "mp4", "aac", "flac"}
+
 
 def _get_service():
     """Get NyayaVaani service from app state."""
@@ -130,15 +133,21 @@ async def nyayavaani_status():
 async def transcribe_audio(
     audio: UploadFile = File(...),
     language_hint: str = Form(default=""),
+    current_user: dict = Depends(_get_current_user()),
 ):
     """Transcribe uploaded audio to text."""
     service = _get_service()
 
-    audio_bytes = await audio.read()
+    max_bytes = service.config.max_audio_size_bytes
+    audio_bytes = await audio.read(max_bytes + 1)
     if not audio_bytes:
         raise HTTPException(status_code=400, detail="Empty audio file")
+    if len(audio_bytes) > max_bytes:
+        raise HTTPException(status_code=413, detail="Audio file too large")
 
-    ext = audio.filename.rsplit(".", 1)[-1] if audio.filename and "." in audio.filename else "webm"
+    ext = audio.filename.rsplit(".", 1)[-1].lower() if audio.filename and "." in audio.filename else "webm"
+    if ext not in _ALLOWED_AUDIO_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Unsupported audio format")
     audio_path = save_upload_audio(audio_bytes, service.config.audio_upload_dir, ext)
 
     try:
@@ -152,9 +161,18 @@ async def transcribe_audio(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        if "Whisper model" not in str(e):
+            logger.error(f"Transcription failed: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Transcription failed")
+        logger.warning(f"Speech-to-text unavailable: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail="Speech-to-text is not configured. Set SARVAM_API_KEY, or install faster-whisper for offline mode.",
+        )
     except Exception as e:
         logger.error(f"Transcription failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Transcription failed")
 
 
 # ============================================================================
@@ -200,7 +218,10 @@ async def synthesize_speech(
 # ============================================================================
 
 @router.post("/classify-intent", response_model=IntentResponse)
-async def classify_intent(request: IntentClassifyRequest):
+async def classify_intent(
+    request: IntentClassifyRequest,
+    current_user: dict = Depends(_get_current_user()),
+):
     """Classify user intent from text."""
     service = _get_service()
 

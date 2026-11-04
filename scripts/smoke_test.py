@@ -111,7 +111,7 @@ def check_auth_flow():
     # Use a random throwaway user so repeat runs don't collide
     uid = uuid.uuid4().hex[:8]
     username = f"smoketest_{uid}"
-    email = f"smoke_{uid}@test.local"
+    email = f"smoke_{uid}@example.com"
     password = "SmokeTest1234!"
 
     r = _try(

@@ -135,7 +135,10 @@ def _authorize_officer_or_admin_for_grievance(current_user: dict, grievance: dic
 # ============================================================================
 
 @router.post("/route", response_model=GrievanceRouteResponse)
-async def route_grievance(request: RouteGrievanceRequest):
+async def route_grievance(
+    request: RouteGrievanceRequest,
+    current_user: dict = Depends(get_current_user),
+):
     """Route citizen grievance to appropriate department."""
     try:
         gr_router = get_grievance_router()
